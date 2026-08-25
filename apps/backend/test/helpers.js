@@ -33,9 +33,13 @@ export function samplePdf(pages = 1) {
 
 /** Stand-in for LobClient that records what it was asked to send. */
 export class FakeLob {
-  constructor({ isLive = false, respond } = {}) {
+  constructor({ isLive = false, respond, onCancel, onVerify } = {}) {
     this.isLive = isLive;
     this.calls = [];
+    this.canceled = [];
+    this.verified = [];
+    this.onCancel = onCancel;
+    this.onVerify = onVerify;
     this.respond = respond ?? ((letter, index) => ({
       id: `ltr_${index}`,
       url: `https://lob.test/${index}.pdf`,
@@ -55,6 +59,42 @@ export class FakeLob {
 
   async getLetter(id) {
     return { id, status: 'processed', to: { name: 'Jane Doe' } };
+  }
+
+  async cancelLetter(id) {
+    this.canceled.push(id);
+    if (this.onCancel) return this.onCancel(id);
+    return { id, deleted: true };
+  }
+
+  async listLetters({ limit = 10 } = {}) {
+    return {
+      data: Array.from({ length: Math.min(limit, 2) }, (_, index) => ({
+        id: `ltr_${index}`,
+        description: `Letter ${index}`,
+        mail_type: 'usps_first_class',
+        extra_service: index === 0 ? 'certified' : null,
+        tracking_number: index === 0 ? '9407123' : null,
+        expected_delivery_date: '2026-09-01',
+        to: { name: 'Jane Doe', address_city: 'Chicago' },
+      })),
+    };
+  }
+
+  async verifyUsAddress(address) {
+    this.verified.push(address);
+    if (this.onVerify) return this.onVerify(address);
+    return {
+      id: 'us_ver_1',
+      recipient: address.name ?? null,
+      primary_line: '500 W Madison St',
+      secondary_line: 'Ste 1000',
+      last_line: 'Chicago IL 60661-2511',
+      deliverability: 'deliverable',
+      valid_address: true,
+      components: { city: 'Chicago', state: 'IL', zip_code: '60661', zip_code_plus_4: '2511' },
+      lob_confidence_score: { score: 100, level: 'high' },
+    };
   }
 }
 

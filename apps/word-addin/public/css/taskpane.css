@@ -300,6 +300,38 @@ button.link {
   font-weight: 600;
 }
 
+.field-actions {
+  margin-top: 10px;
+}
+
+.verify-result:not(:empty) {
+  margin-top: 8px;
+}
+
+.verify-result .message {
+  margin-bottom: 0;
+}
+
+.suggestion {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.suggestion .return-address {
+  margin-top: 0;
+}
+
+.cancel-controls {
+  margin-top: 10px;
+}
+
+.cancel-controls .hint,
+.cancel-controls .message {
+  margin: 6px 0 0;
+}
+
 .result-item {
   border-left: 3px solid var(--ok);
   padding: 6px 0 6px 10px;

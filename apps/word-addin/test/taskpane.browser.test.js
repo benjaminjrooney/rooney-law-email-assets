@@ -1,5 +1,5 @@
 /**
- * End-to-end smoke test for the task pane.
+ * End-to-end smoke tests for the task pane.
  *
  * Runs the real HTML/CSS/JS against the real backend (with a stubbed Lob) in
  * headless Chromium, standing in for Word by injecting a minimal Office.js.
@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createApp } from '../../backend/src/app.js';
+import { EventStore } from '../../backend/src/event-store.js';
 import { testConfig, startServer, samplePdf, FakeLob, TEST_TOKEN } from '../../backend/test/helpers.js';
 
 let chromium;
@@ -103,35 +104,62 @@ function officeStub(letterText, pdfBytes) {
   };
 }
 
+/**
+ * Boot the service, open the task pane in a browser, and return everything the
+ * test needs plus a close() that tears it all down.
+ */
+async function openTaskPane({ browser, lob = new FakeLob(), config = testConfig(), eventStore, withToken = true } = {}) {
+  const server = await startServer(createApp({ config, lobClient: lob, eventStore }));
+  const context = await browser.newContext();
+  // office.js comes from Microsoft's CDN in the real add-in; the stub replaces it.
+  await context.route('https://appsforoffice.microsoft.com/**', (route) => route.abort());
+
+  const page = await context.newPage();
+  await page.addInitScript(`window.officeStubImpl = ${officeStub.toString()};`);
+  // Init scripts run in the order they are added: define the stub, then use it.
+  await page.addInitScript(
+    ([letterText, bytes, token]) => {
+      if (token) {
+        window.localStorage.setItem('rooneyLawMail.baseUrl', window.location.origin);
+        window.localStorage.setItem('rooneyLawMail.token', token);
+      }
+      window.officeStubImpl(letterText, bytes);
+    },
+    [LETTER_TEXT, [...samplePdf()], withToken ? TEST_TOKEN : ''],
+  );
+
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`${server.base}/addin/taskpane.html`);
+
+  return {
+    page,
+    server,
+    lob,
+    errors,
+    async close() {
+      await context.close();
+      await server.close();
+    },
+  };
+}
+
+/** Two clicks: the first asks for confirmation, the second actually sends. */
+async function sendLetter(page) {
+  await page.click('#send');
+  await page.click('#send');
+  await page.waitForSelector('#results:not([hidden])');
+}
+
 test('task pane reads the letter, pre-fills it and sends it', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
   const browser = await launchBrowser();
   if (!browser) return t.skip(SKIP_REASON);
 
-  const lob = new FakeLob();
-  const server = await startServer(createApp({ config: testConfig(), lobClient: lob }));
+  const pane = await openTaskPane({ browser });
+  const { page, lob, errors } = pane;
 
   try {
-    const context = await browser.newContext();
-    // office.js comes from Microsoft's CDN in the real add-in; the stub replaces it.
-    await context.route('https://appsforoffice.microsoft.com/**', (route) => route.abort());
-
-    const page = await context.newPage();
-    const pdfBytes = [...samplePdf()];
-    // Init scripts run in the order they are added: define the stub, then use it.
-    await page.addInitScript(`window.officeStubImpl = ${officeStub.toString()};`);
-    await page.addInitScript(
-      ([letterText, bytes, token]) => {
-        window.localStorage.setItem('rooneyLawMail.baseUrl', window.location.origin);
-        window.localStorage.setItem('rooneyLawMail.token', token);
-        window.officeStubImpl(letterText, bytes);
-      },
-      [LETTER_TEXT, pdfBytes, TEST_TOKEN],
-    );
-
-    const errors = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-
-    await page.goto(`${server.base}/addin/taskpane.html`);
     await page.waitForSelector('#letter-form:not([hidden])');
 
     // Auto-extraction filled the form from the document text.
@@ -150,7 +178,6 @@ test('task pane reads the letter, pre-fills it and sends it', { skip: chromium ?
     assert.match(await page.textContent('#summary'), /2 letters/);
     assert.match(await page.textContent('#mode-badge'), /test mode/);
 
-    // First click confirms, second click sends.
     await page.click('#send');
     assert.match(await page.textContent('#send'), /Confirm/);
     await page.click('#send');
@@ -167,8 +194,8 @@ test('task pane reads the letter, pre-fills it and sends it', { skip: chromium ?
     assert.equal(lob.calls[0].file.filename, 'Smith demand letter.pdf');
     assert.deepEqual(errors, []);
   } finally {
+    await pane.close();
     await browser.close();
-    await server.close();
   }
 });
 
@@ -176,20 +203,140 @@ test('the task pane asks for settings when none are stored', { skip: chromium ? 
   const browser = await launchBrowser();
   if (!browser) return t.skip(SKIP_REASON);
 
-  const server = await startServer(createApp({ config: testConfig(), lobClient: new FakeLob() }));
+  const pane = await openTaskPane({ browser, withToken: false });
+  try {
+    await pane.page.waitForSelector('#settings-panel:not([hidden])');
+    assert.match(await pane.page.textContent('#status'), /access token/i);
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('a sent letter can be canceled within the window', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const sendDate = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const lob = new FakeLob({
+    respond: (letter, index) => ({ id: `ltr_${index}`, send_date: sendDate, to: letter.to }),
+  });
+  const pane = await openTaskPane({ browser, lob });
+  const { page } = pane;
 
   try {
-    const context = await browser.newContext();
-    await context.route('https://appsforoffice.microsoft.com/**', (route) => route.abort());
-    const page = await context.newPage();
-    await page.addInitScript(`window.officeStubImpl = ${officeStub.toString()};`);
-    await page.addInitScript(([letterText]) => window.officeStubImpl(letterText, []), [LETTER_TEXT]);
+    await page.waitForSelector('#letter-form:not([hidden])');
+    await sendLetter(page);
 
-    await page.goto(`${server.base}/addin/taskpane.html`);
-    await page.waitForSelector('#settings-panel:not([hidden])');
-    assert.match(await page.textContent('#status'), /access token/i);
+    // The countdown comes from the letter's send_date, not a hard-coded guess.
+    assert.match(await page.textContent('#results-body'), /Can be pulled back for another \d+m \d\ds/);
+
+    await page.click('#results-body .cancel-controls button');
+    await page.waitForSelector('#results-body .message-ok');
+    assert.match(await page.textContent('#results-body .message-ok'), /will not be printed or charged/);
+    assert.deepEqual(pane.lob.canceled, ['ltr_0']);
+    assert.deepEqual(pane.errors, []);
   } finally {
+    await pane.close();
     await browser.close();
-    await server.close();
+  }
+});
+
+test('the cancel button is closed off once the window has passed', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const sendDate = new Date(Date.now() - 60 * 1000).toISOString();
+  const lob = new FakeLob({
+    respond: (letter, index) => ({ id: `ltr_${index}`, send_date: sendDate, to: letter.to }),
+  });
+  const pane = await openTaskPane({ browser, lob });
+
+  try {
+    await pane.page.waitForSelector('#letter-form:not([hidden])');
+    await sendLetter(pane.page);
+
+    assert.match(await pane.page.textContent('#results-body'), /cancellation window has closed/);
+    assert.equal(await pane.page.isDisabled('#results-body .cancel-controls button'), true);
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('an address can be checked and the USPS version applied', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const pane = await openTaskPane({ browser, lob: new FakeLob({ isLive: true }) });
+  const { page } = pane;
+
+  try {
+    await page.waitForSelector('#letter-form:not([hidden])');
+    assert.match(await page.textContent('#mode-badge'), /live postage/);
+
+    await page.click('#check-to');
+    await page.waitForSelector('#to-verify .message');
+    assert.match(await page.textContent('#to-verify'), /USPS can deliver/);
+
+    // USPS shortened the street line, so the pane offers the change rather than
+    // silently rewriting what was typed.
+    assert.match(await page.textContent('#to-verify .suggestion'), /500 W Madison St/);
+    assert.equal(await page.inputValue('#to-line1'), '500 West Madison Street, Suite 1000');
+
+    await page.click('#to-verify .suggestion button');
+    assert.equal(await page.inputValue('#to-line1'), '500 W Madison St');
+    assert.equal(await page.inputValue('#to-line2'), 'Ste 1000');
+    assert.equal(await page.inputValue('#to-zip'), '60661-2511');
+    assert.deepEqual(pane.errors, []);
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('on a test key the address check says why it cannot run', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const pane = await openTaskPane({ browser });
+  try {
+    await pane.page.waitForSelector('#letter-form:not([hidden])');
+    assert.match(await pane.page.textContent('#check-to'), /needs a live Lob key/);
+    assert.equal(await pane.page.isDisabled('#check-to'), true);
+    assert.equal(await pane.page.isDisabled('#cc-0-enabled'), false, 'the rest of the pane still works');
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('recent mail shows the latest tracking event for each letter', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const eventStore = new EventStore({});
+  await eventStore.record({
+    reference_id: 'ltr_0',
+    event_type: { id: 'letter.certified.delivered' },
+    body: { id: 'ltr_0', tracking_number: '9407123', to: { name: 'Jane Doe' } },
+  });
+
+  const config = testConfig({ env: { LOB_WEBHOOK_SECRET: 'whsec_test' } });
+  const pane = await openTaskPane({ browser, config, eventStore });
+
+  try {
+    await pane.page.waitForSelector('#letter-form:not([hidden])');
+    await pane.page.click('#recent-mail summary');
+    await pane.page.waitForSelector('#recent-body .result-item');
+
+    const text = await pane.page.textContent('#recent-body');
+    assert.match(text, /Certified: delivered/);
+    assert.match(text, /9407123/);
+    assert.match(text, /No tracking event yet/, 'letters without events are still listed');
+    assert.deepEqual(pane.errors, []);
+  } finally {
+    await pane.close();
+    await browser.close();
   }
 });

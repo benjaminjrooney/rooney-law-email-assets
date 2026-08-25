@@ -6,13 +6,17 @@ import express from 'express';
 import multer from 'multer';
 
 import { requireApiToken } from './auth.js';
-import { LobClient, LobError, summarizeLetter } from './lob.js';
+import { LobClient, LobError, summarizeLetter, summarizeVerification } from './lob.js';
 import { LetterRateLimiter } from './rate-limit.js';
 import { configProblems } from './config.js';
+import { EventStore } from './event-store.js';
+import { verifyWebhook } from './webhook.js';
 import {
   MAIL_CLASSES,
   ADDRESS_PLACEMENTS,
   validateLetterRequest,
+  validateAddress,
+  normalizeAddress,
   looksLikePdf,
   estimatePageCount,
 } from './validate.js';
@@ -51,8 +55,9 @@ function corsMiddleware(allowedOrigins) {
  * @param {object} options.config from loadConfig()
  * @param {LobClient} [options.lobClient] injected in tests
  * @param {LetterRateLimiter} [options.rateLimiter]
+ * @param {EventStore} [options.eventStore]
  */
-export function createApp({ config, lobClient, rateLimiter } = {}) {
+export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   const lob =
     lobClient ??
     new LobClient({
@@ -66,6 +71,14 @@ export function createApp({ config, lobClient, rateLimiter } = {}) {
     rateLimiter ??
     new LetterRateLimiter({ maxPerHour: config.limits.maxPerHour, maxPerDay: config.limits.maxPerDay });
 
+  const events =
+    eventStore ??
+    new EventStore({
+      maxEvents: config.events.maxEvents,
+      logPath: config.events.logPath,
+      onError: (message) => log('events.log_failed', { message }),
+    });
+
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: config.limits.maxFileBytes, files: 1, fields: 20 },
@@ -75,6 +88,9 @@ export function createApp({ config, lobClient, rateLimiter } = {}) {
   app.disable('x-powered-by');
   app.set('trust proxy', true);
   app.use(corsMiddleware(config.allowedOrigins));
+  // The webhook signature covers the exact bytes Lob sent, so this route needs
+  // the raw body. Mounted first: body-parser skips a request already parsed.
+  app.use('/webhooks/lob', express.raw({ type: '*/*', limit: '1mb' }));
   app.use(express.json({ limit: '256kb' }));
 
   const guard = requireApiToken(config);
@@ -106,6 +122,13 @@ export function createApp({ config, lobClient, rateLimiter } = {}) {
       mailClasses: Object.values(MAIL_CLASSES).map(({ id, label, tracked }) => ({ id, label, tracked })),
       lobMode: lob.isLive ? 'live' : 'test',
       limits: { maxFileBytes: config.limits.maxFileBytes, maxPerHour: config.limits.maxPerHour },
+      features: {
+        // Verification returns real answers only on a live key.
+        addressCheck: lob.isLive,
+        verifyBeforeSend: config.verifyBeforeSend,
+        tracking: Boolean(config.lob.webhookSecret),
+        cancellationWindowMinutes: config.lob.cancellationWindowMinutes,
+      },
     });
   });
 
@@ -153,6 +176,33 @@ export function createApp({ config, lobClient, rateLimiter } = {}) {
       const allowance = limiter.check(mailings.length);
       if (!allowance.allowed) {
         return res.status(429).json({ error: { message: allowance.reason } });
+      }
+
+      // Optional pre-flight: catch an undeliverable address before any letter
+      // is created, so a bad CC cannot leave a half-mailed batch behind.
+      if (config.verifyBeforeSend && lob.isLive) {
+        const undeliverable = [];
+        for (const mailing of mailings) {
+          try {
+            const check = summarizeVerification(await lob.verifyUsAddress(mailing.address), { testMode: false });
+            if (check.usable && check.deliverability === 'undeliverable') {
+              const who = mailing.address.name || mailing.address.company;
+              undeliverable.push(`${who}: ${check.message}`);
+            }
+          } catch (error) {
+            // Verification is a safety net, not a gate: if the check itself
+            // fails, fall through to Lob's own validation at creation time.
+            log('verify.failed', { message: error.message });
+          }
+        }
+        if (undeliverable.length > 0) {
+          return res.status(400).json({
+            error: {
+              message: `Nothing was mailed — ${undeliverable.length === 1 ? 'an address is' : 'addresses are'} undeliverable.`,
+              details: undeliverable,
+            },
+          });
+        }
       }
 
       const baseKey = value.idempotencyKey || randomUUID();
@@ -235,10 +285,123 @@ export function createApp({ config, lobClient, rateLimiter } = {}) {
   app.get('/api/letters/:id', guard, async (req, res, next) => {
     try {
       const letter = await lob.getLetter(req.params.id);
-      res.json({ letter: summarizeLetter(letter), status: letter?.status ?? null, events: letter?.tracking_events ?? [] });
+      res.json({
+        letter: summarizeLetter(letter),
+        status: letter?.status ?? null,
+        events: letter?.tracking_events ?? [],
+        lastEvent: events.latestFor(req.params.id),
+      });
     } catch (error) {
       next(error);
     }
+  });
+
+  /**
+   * Pull a letter back out of production. Lob allows this only until the
+   * letter's send_date — five minutes after creation on a default account.
+   */
+  app.post('/api/letters/:id/cancel', guard, async (req, res, next) => {
+    try {
+      const result = await lob.cancelLetter(req.params.id);
+      log('letter.canceled', { id: req.params.id });
+      res.json({ ok: true, id: req.params.id, deleted: result?.deleted ?? true });
+    } catch (error) {
+      if (error instanceof LobError) {
+        log('letter.cancel_failed', { id: req.params.id, message: error.message, statusCode: error.statusCode });
+        // Past the window Lob answers 404/422; say what that means rather than
+        // leaving the user wondering whether the letter is coming back.
+        const tooLate = error.statusCode === 404 || error.statusCode === 422;
+        return res.status(error.statusCode).json({
+          error: {
+            message: tooLate
+              ? `This letter can no longer be canceled — it has gone to print. (Lob: ${error.message})`
+              : error.message,
+            code: error.lobCode,
+          },
+        });
+      }
+      next(error);
+    }
+  });
+
+  // ------------------------------------------------------------- addresses --
+
+  /** Check one address against USPS data without creating a letter. */
+  app.post('/api/addresses/verify', guard, async (req, res, next) => {
+    try {
+      const address = normalizeAddress(req.body?.address ?? req.body);
+      const problems = validateAddress(address, '');
+      if (problems.length > 0) {
+        return res.status(400).json({ error: { message: problems[0], details: problems } });
+      }
+
+      const verification = await lob.verifyUsAddress(address);
+      const summary = summarizeVerification(verification, { testMode: !lob.isLive });
+      res.json({ ...summary, submitted: address });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // -------------------------------------------------------------- tracking --
+
+  /**
+   * Lob's webhook receiver. Authenticated by signature rather than by the
+   * add-in's token: Lob cannot send one, and the signature proves origin.
+   */
+  app.post('/webhooks/lob', async (req, res) => {
+    const verdict = verifyWebhook({
+      secret: config.lob.webhookSecret,
+      signature: req.get('lob-signature'),
+      timestamp: req.get('lob-signature-timestamp'),
+      rawBody: req.body,
+    });
+
+    if (!verdict.ok) {
+      log('webhook.rejected', { message: verdict.message });
+      return res.status(verdict.status).json({ error: { message: verdict.message } });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body));
+    } catch {
+      return res.status(400).json({ error: { message: 'Webhook body is not valid JSON.' } });
+    }
+
+    const event = await events.record(payload);
+    log('webhook.received', {
+      eventType: event.eventType,
+      letterId: event.letterId,
+      recipient: event.recipient,
+      notable: event.notable,
+    });
+
+    // Always 200 once the signature checks out: Lob retries non-2xx, and a
+    // replayed delivery would only duplicate an event we already hold.
+    res.json({ ok: true });
+  });
+
+  /** Recent mailings, from Lob, annotated with the latest tracking event. */
+  app.get('/api/mailings', guard, async (req, res, next) => {
+    try {
+      const limit = Math.min(Math.max(Number.parseInt(req.query.limit ?? '10', 10) || 10, 1), 50);
+      const response = await lob.listLetters({ limit });
+      const mailings = (response?.data ?? []).map((letter) => ({
+        ...summarizeLetter(letter),
+        description: letter?.description ?? null,
+        lastEvent: events.latestFor(letter?.id),
+      }));
+      res.json({ mailings, trackingConfigured: Boolean(config.lob.webhookSecret) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /** Everything the webhook has told us, newest first. */
+  app.get('/api/events', guard, (req, res) => {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit ?? '50', 10) || 50, 1), 200);
+    res.json({ events: events.recent(limit), trackingConfigured: Boolean(config.lob.webhookSecret) });
   });
 
   // ----------------------------------------------------------- add-in files --

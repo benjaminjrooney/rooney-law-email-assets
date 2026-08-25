@@ -25,7 +25,14 @@ const state = {
   idempotencyKey: null,
   awaitingConfirm: false,
   busy: false,
+  /** Countdown timers for the cancellation windows shown on the results card. */
+  timers: [],
 };
+
+function clearTimers() {
+  for (const timer of state.timers) clearInterval(timer);
+  state.timers = [];
+}
 
 // ---------------------------------------------------------------- messages --
 
@@ -118,6 +125,8 @@ function applyConfig(config) {
     select.append(option);
   }
 
+  configureCheckButton(el('check-to'));
+
   el('opt-color').checked = Boolean(config.defaults.color);
   el('opt-double-sided').checked = Boolean(config.defaults.doubleSided);
   el('opt-placement').value = config.defaults.addressPlacement;
@@ -145,6 +154,112 @@ function fillRecipient(recipient) {
   el('to-city').value = recipient?.address_city ?? '';
   el('to-state').value = recipient?.address_state ?? '';
   el('to-zip').value = recipient?.address_zip ?? '';
+}
+
+// -------------------------------------------------------- address checking --
+
+const DELIVERABILITY_TONE = {
+  deliverable: 'ok',
+  deliverable_unnecessary_unit: 'ok',
+  deliverable_incorrect_unit: 'warn',
+  deliverable_missing_unit: 'warn',
+  undeliverable: 'error',
+};
+
+const STANDARDIZED_FIELDS = [
+  ['address_line1', 'line1'],
+  ['address_line2', 'line2'],
+  ['address_city', 'city'],
+  ['address_state', 'state'],
+  ['address_zip', 'zip'],
+];
+
+function sameAddress(standardized, current) {
+  return STANDARDIZED_FIELDS.every(
+    ([field]) =>
+      (standardized[field] ?? '').trim().toLowerCase() === (current[field] ?? '').trim().toLowerCase(),
+  );
+}
+
+function applyStandardized(prefix, standardized) {
+  for (const [field, suffix] of STANDARDIZED_FIELDS) {
+    const input = el(`${prefix}${suffix}`);
+    if (input) input.value = standardized[field] ?? '';
+  }
+}
+
+function renderVerification(result, container, prefix) {
+  container.replaceChildren();
+
+  const tone = result.usable ? DELIVERABILITY_TONE[result.deliverability] ?? 'info' : 'info';
+  const box = document.createElement('div');
+  box.className = `message message-${tone}`;
+  box.append(document.createTextNode(result.message));
+  container.append(box);
+
+  if (!result.usable || !result.standardized) return;
+
+  const current = readAddressFields(prefix);
+  if (sameAddress(result.standardized, current)) return;
+
+  // USPS rewrote something. Show what it would become rather than silently
+  // changing what the user typed.
+  const suggestion = document.createElement('div');
+  suggestion.className = 'suggestion';
+  const lines = [
+    result.standardized.address_line1,
+    result.standardized.address_line2,
+    `${result.standardized.address_city}, ${result.standardized.address_state} ${result.standardized.address_zip}`,
+  ].filter(Boolean);
+  const text = document.createElement('p');
+  text.className = 'return-address';
+  text.textContent = `USPS has it as:\n${lines.join('\n')}`;
+  const apply = document.createElement('button');
+  apply.type = 'button';
+  apply.className = 'ghost';
+  apply.textContent = 'Use the USPS version';
+  apply.addEventListener('click', () => {
+    applyStandardized(prefix, result.standardized);
+    suggestion.replaceChildren();
+    const applied = document.createElement('p');
+    applied.className = 'hint';
+    applied.textContent = 'Address updated.';
+    suggestion.append(applied);
+  });
+  suggestion.append(text, apply);
+  container.append(suggestion);
+}
+
+/**
+ * Address checking only returns real answers on a live Lob key, so on a test
+ * key the control stays visible but says why it cannot run.
+ */
+function configureCheckButton(button) {
+  const available = Boolean(state.config?.features?.addressCheck);
+  button.disabled = !available;
+  button.textContent = available ? 'Check this address with USPS' : 'Address check needs a live Lob key';
+  return button;
+}
+
+async function checkAddress({ prefix, container, button }) {
+  container.replaceChildren();
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Checking…';
+
+  try {
+    const result = await state.client.verifyAddress(readAddressFields(prefix));
+    renderVerification(result, container, prefix);
+  } catch (error) {
+    const box = document.createElement('div');
+    box.className = 'message message-error';
+    box.textContent =
+      error instanceof ApiError ? error.message : `Could not check the address: ${error?.message ?? error}`;
+    container.replaceChildren(box);
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
 }
 
 function ccFieldId(index, field) {
@@ -256,6 +371,19 @@ function renderCcList(entries) {
       fields.append(note);
     }
 
+    const actions = document.createElement('div');
+    actions.className = 'field-actions';
+    const checkButton = configureCheckButton(document.createElement('button'));
+    checkButton.type = 'button';
+    checkButton.className = 'link';
+    const verifyBox = document.createElement('div');
+    verifyBox.className = 'verify-result';
+    checkButton.addEventListener('click', () =>
+      checkAddress({ prefix: `cc-${index}-`, container: verifyBox, button: checkButton }),
+    );
+    actions.append(checkButton);
+    fields.append(actions, verifyBox);
+
     wrapper.append(fields);
     list.append(wrapper);
 
@@ -271,6 +399,8 @@ function renderCcList(entries) {
 
 async function readDocument() {
   clearStatus();
+  clearTimers();
+  el('to-verify').replaceChildren();
   const reading = showMessage('info', 'Reading the letter…', { spinner: true });
 
   let text;
@@ -522,8 +652,155 @@ function reportSendError(error) {
   showMessage('error', error?.message ?? 'Something went wrong while sending.', { replace: true });
 }
 
+// --------------------------------------------------------- cancel a letter --
+
+/**
+ * Lob accepts a cancellation until the letter's send_date — five minutes after
+ * creation on a default account. The countdown is driven by that date rather
+ * than a guess, so it stays right if the firm's window is ever changed.
+ */
+function cancellationDeadline(letter) {
+  if (letter.sendDate) {
+    const deadline = Date.parse(letter.sendDate);
+    if (Number.isFinite(deadline)) return deadline;
+  }
+  const created = letter.dateCreated ? Date.parse(letter.dateCreated) : Date.now();
+  const minutes = state.config?.features?.cancellationWindowMinutes ?? 5;
+  return (Number.isFinite(created) ? created : Date.now()) + minutes * 60 * 1000;
+}
+
+function formatRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
+}
+
+function buildCancelControls(letter) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'cancel-controls';
+  if (!letter.id) return wrapper;
+
+  const deadline = cancellationDeadline(letter);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'ghost';
+  button.textContent = 'Cancel this letter';
+
+  const note = document.createElement('p');
+  note.className = 'hint';
+
+  const refresh = () => {
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      note.textContent = `Can be pulled back for another ${formatRemaining(remaining)}.`;
+      return true;
+    }
+    button.disabled = true;
+    note.textContent = 'The cancellation window has closed — this letter is going to print.';
+    return false;
+  };
+
+  if (refresh()) {
+    const timer = setInterval(() => {
+      if (!refresh()) clearInterval(timer);
+    }, 1000);
+    state.timers.push(timer);
+  }
+
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    button.textContent = 'Canceling…';
+    try {
+      await state.client.cancelLetter(letter.id);
+      wrapper.replaceChildren();
+      const done = document.createElement('p');
+      done.className = 'message message-ok';
+      done.textContent = 'Canceled. This letter will not be printed or charged.';
+      wrapper.append(done);
+    } catch (error) {
+      button.textContent = 'Cancel this letter';
+      button.disabled = false;
+      note.textContent =
+        error instanceof ApiError ? error.message : `Could not cancel: ${error?.message ?? error}`;
+      note.className = 'message message-error';
+    }
+  });
+
+  wrapper.append(button, note);
+  return wrapper;
+}
+
+// ------------------------------------------------------------ recent mail --
+
+function renderMailings(response) {
+  const body = el('recent-body');
+  body.replaceChildren();
+
+  const mailings = response.mailings ?? [];
+  if (mailings.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'No letters yet.';
+    body.append(empty);
+    return;
+  }
+
+  for (const mailing of mailings) {
+    const item = document.createElement('div');
+    item.className = 'result-item';
+
+    const heading = document.createElement('strong');
+    heading.textContent = mailing.to?.name || mailing.to?.company || mailing.id;
+    item.append(heading);
+
+    const list = document.createElement('dl');
+    const addRow = (term, value) => {
+      if (!value) return;
+      const dt = document.createElement('dt');
+      dt.textContent = term;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      list.append(dt, dd);
+    };
+    addRow('Status', mailing.lastEvent ? mailing.lastEvent.label : 'No tracking event yet');
+    addRow('Tracking', mailing.trackingNumber);
+    addRow('Expected', mailing.expectedDeliveryDate);
+    addRow('Reference', mailing.description);
+    item.append(list);
+    body.append(item);
+  }
+
+  if (!response.trackingConfigured) {
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent =
+      'Delivery tracking is not switched on: set LOB_WEBHOOK_SECRET on the service and add the webhook in Lob.';
+    body.append(note);
+  }
+}
+
+async function loadMailings() {
+  const body = el('recent-body');
+  const loading = document.createElement('p');
+  loading.className = 'hint';
+  loading.textContent = 'Loading…';
+  body.replaceChildren(loading);
+
+  try {
+    renderMailings(await state.client.getMailings(10));
+  } catch (error) {
+    const failed = document.createElement('p');
+    failed.className = 'message message-error';
+    failed.textContent =
+      error instanceof ApiError ? error.message : `Could not load recent mail: ${error?.message ?? error}`;
+    body.replaceChildren(failed);
+  }
+}
+
 function renderResults(response) {
   clearStatus();
+  clearTimers();
   const body = el('results-body');
   body.replaceChildren();
 
@@ -570,6 +847,8 @@ function renderResults(response) {
         });
         item.append(link);
       }
+
+      item.append(buildCancelControls(mailing.letter));
     } else {
       addRow('Class', mailClassLabel(mailing.mailClass));
       addRow('Recipient', mailing.recipient);
@@ -609,9 +888,21 @@ function wireEvents() {
   el('cancel-settings').addEventListener('click', () => showSettingsPanel(false));
   el('start-over').addEventListener('click', () => {
     el('results').hidden = true;
+    clearTimers();
     state.idempotencyKey = null;
     readDocument();
   });
+
+  el('check-to').addEventListener('click', () =>
+    checkAddress({ prefix: 'to-', container: el('to-verify'), button: el('check-to') }),
+  );
+
+  // Recent mail is a Lob round-trip, so it loads when the section is opened
+  // rather than on every task pane launch.
+  el('recent-mail').addEventListener('toggle', () => {
+    if (el('recent-mail').open) loadMailings();
+  });
+  el('refresh-recent').addEventListener('click', loadMailings);
 
   for (const id of ['to-name', 'to-company', 'to-line1', 'to-line2', 'to-city', 'to-state', 'to-zip']) {
     el(id).addEventListener('input', () => el(id).setAttribute('aria-invalid', 'false'));

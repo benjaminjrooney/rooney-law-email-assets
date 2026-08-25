@@ -167,9 +167,101 @@ export class LobClient {
     return this.request(`/letters/${encodeURIComponent(id)}`);
   }
 
+  /**
+   * Pull a letter out of production. Only possible while the letter's
+   * `send_date` is still in the future — five minutes after creation on a
+   * default Lob account. Never retried: a cancel that timed out may well have
+   * landed, and asking twice turns a success into a confusing 404.
+   */
   async cancelLetter(id) {
     return this.request(`/letters/${encodeURIComponent(id)}`, { method: 'DELETE', retries: 0 });
   }
+
+  async listLetters({ limit = 10 } = {}) {
+    const params = new URLSearchParams({ limit: String(Math.min(Math.max(limit, 1), 100)) });
+    return this.request(`/letters?${params}`);
+  }
+
+  /**
+   * Check an address against USPS data before spending postage on it.
+   *
+   * Note: Lob only returns real results for a *live* API key. With a test key
+   * the request is validated but comes back empty, so callers must tell the
+   * user rather than presenting an empty result as "undeliverable".
+   */
+  async verifyUsAddress(address) {
+    const body = {
+      recipient: address.name || address.company || undefined,
+      primary_line: address.address_line1,
+      secondary_line: address.address_line2 || undefined,
+      city: address.address_city,
+      state: address.address_state,
+      zip_code: address.address_zip,
+    };
+    for (const key of Object.keys(body)) {
+      if (body[key] === undefined || body[key] === '') delete body[key];
+    }
+    // `case=proper` keeps the standardized address in mixed case, so it can be
+    // dropped straight back into the form without shouting at the recipient.
+    return this.request('/us_verifications?case=proper', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Turn a Lob us_verification into something the task pane can act on.
+ *
+ * @param {object} verification raw Lob response
+ * @param {boolean} testMode true when the service runs on a test Lob key
+ */
+export function summarizeVerification(verification, { testMode = false } = {}) {
+  const components = verification?.components ?? {};
+  const zip = components.zip_code ?? '';
+  const plus4 = components.zip_code_plus_4 ?? '';
+
+  const standardized = {
+    address_line1: verification?.primary_line ?? '',
+    address_line2: verification?.secondary_line ?? '',
+    address_city: components.city ?? '',
+    address_state: components.state ?? '',
+    address_zip: zip && plus4 ? `${zip}-${plus4}` : zip,
+  };
+
+  const deliverability = verification?.deliverability ?? null;
+  // Lob returns an empty object for a test key, which must not read as "bad address".
+  const usable = Boolean(deliverability) && Boolean(standardized.address_line1);
+
+  return {
+    deliverability,
+    validAddress: verification?.valid_address ?? null,
+    confidenceScore: verification?.lob_confidence_score?.score ?? null,
+    standardized: usable ? standardized : null,
+    usable,
+    testModeLimited: testMode && !usable,
+    message: describeDeliverability(deliverability, { testMode, usable }),
+  };
+}
+
+const DELIVERABILITY_MESSAGES = {
+  deliverable: 'USPS can deliver to this address.',
+  deliverable_unnecessary_unit: 'Deliverable. The suite/unit line is not needed and can be dropped.',
+  deliverable_incorrect_unit:
+    'Deliverable to the building, but the suite/unit may not exist — the letter may not reach the addressee.',
+  deliverable_missing_unit:
+    'Deliverable to the building, but a suite/unit is missing — the letter may not reach the addressee.',
+  undeliverable: 'USPS does not recognize this address. Check it before sending.',
+};
+
+function describeDeliverability(deliverability, { testMode, usable }) {
+  if (!usable) {
+    return testMode
+      ? 'Address checking needs a live Lob key. On a test key Lob returns an empty result, so nothing can be confirmed here.'
+      : 'Lob returned no verification result for this address.';
+  }
+  return DELIVERABILITY_MESSAGES[deliverability] ?? `Lob reported "${deliverability}".`;
 }
 
 /** Reduce a Lob letter object to the fields the add-in displays. */

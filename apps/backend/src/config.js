@@ -69,6 +69,22 @@ export function loadConfig(env = process.env) {
       // different USPS use type and Lob requires the distinction.
       useType: str('LOB_USE_TYPE', 'operational', env),
       timeoutMs: int('LOB_TIMEOUT_MS', 60_000, env),
+      // Shown on the webhook's page in the Lob dashboard. Without it the
+      // webhook endpoint refuses every delivery.
+      webhookSecret: str('LOB_WEBHOOK_SECRET', '', env),
+      // Fallback only: the real window comes from each letter's send_date.
+      cancellationWindowMinutes: int('LOB_CANCELLATION_WINDOW_MINUTES', 5, env),
+    },
+
+    // Address checking costs a Lob lookup per call and only returns real
+    // results on a live key, so it is opt-in rather than automatic.
+    verifyBeforeSend: bool('VERIFY_BEFORE_SEND', false, env),
+
+    events: {
+      // Append tracking events here as JSON lines, e.g. a Railway volume at
+      // /data/lob-events.jsonl. Unset means memory only.
+      logPath: str('EVENT_LOG_PATH', '', env),
+      maxEvents: int('EVENT_MAX_RETAINED', 500, env),
     },
 
     // The firm's return address, printed on the envelope.

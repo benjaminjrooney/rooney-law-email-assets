@@ -79,4 +79,23 @@ export class ApiClient {
   getLetter(id) {
     return this.request(`/api/letters/${encodeURIComponent(id)}`);
   }
+
+  /** Pull a letter back out of production, if Lob's window is still open. */
+  cancelLetter(id) {
+    return this.request(`/api/letters/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+  }
+
+  /** Check one address against USPS data without creating a letter. */
+  verifyAddress(address) {
+    return this.request('/api/addresses/verify', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  /** Recent letters with their latest tracking event. */
+  getMailings(limit = 10) {
+    return this.request(`/api/mailings?limit=${encodeURIComponent(limit)}`);
+  }
 }

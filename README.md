@@ -24,6 +24,19 @@ through Lob's API. Each CC copy is mailed as its own letter with the same PDF.
 The same Railway service also serves the add-in's HTML and JavaScript, so there
 is one thing to deploy and one URL to trust.
 
+Around the send itself:
+
+- **Undo.** Lob accepts a cancellation until a letter's `send_date` — five
+  minutes after creation by default. The results card shows a live countdown and
+  a cancel button per mailing.
+- **Address checking.** A button on each recipient runs Lob's USPS verification
+  and offers the standardized address rather than rewriting what was typed.
+  Needs a live Lob key. `VERIFY_BEFORE_SEND=true` also blocks a send when any
+  address is undeliverable, so a bad CC can't leave a half-mailed batch.
+- **Delivery tracking.** A signature-verified webhook receiver records Lob's
+  tracking events, including the certified ones, and a "Recent mail" panel shows
+  the latest status per letter.
+
 - **Setting it up:** [`docs/SETUP.md`](docs/SETUP.md) — Lob keys, Railway
   deployment, building the manifest, sideloading in Word, and going live.
 - **What the parser reads:** [`docs/LETTER-FORMAT.md`](docs/LETTER-FORMAT.md).

@@ -66,6 +66,10 @@
               <input id="to-zip" type="text" name="to-zip" maxlength="10" autocomplete="off" />
             </div>
           </div>
+          <div class="field-actions">
+            <button id="check-to" type="button" class="link">Check this address with USPS</button>
+          </div>
+          <div id="to-verify" class="verify-result"></div>
         </section>
 
         <section id="cc-section" class="card" hidden>
@@ -115,6 +119,15 @@
         <div id="results-body"></div>
         <button id="start-over" type="button" class="ghost">Mail another letter</button>
       </section>
+
+      <!-- ---------------------------------------------------- recent mail -->
+      <details id="recent-mail" class="card">
+        <summary>Recent mail</summary>
+        <div class="details-body">
+          <div id="recent-body"></div>
+          <button id="refresh-recent" type="button" class="link">Refresh</button>
+        </div>
+      </details>
     </main>
 
     <noscript>This add-in needs JavaScript.</noscript>

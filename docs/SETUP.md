@@ -125,6 +125,65 @@ Swap `LOB_API_KEY` in Railway to the `live_...` key and redeploy. The task pane
 badge turns from *test mode* to *live postage*, and the confirmation step warns
 that postage will be charged.
 
+## 7. Delivery tracking (optional, recommended for certified)
+
+Lob reports delivery progress by webhook. Without this the add-in still mails
+letters and returns tracking numbers — you just have to check the Lob dashboard
+to learn what happened to them.
+
+1. In the Lob dashboard, **Webhooks → Create webhook**.
+2. URL: `https://rooney-mail.up.railway.app/webhooks/lob`
+3. Subscribe to the letter events you care about. The useful ones are
+   `letter.mailed`, `letter.processed_for_delivery`, `letter.delivered`,
+   `letter.returned_to_sender`, and the certified equivalents
+   (`letter.certified.delivered`, `letter.certified.pickup_available`,
+   `letter.certified.returned_to_sender`, `letter.certified.issue`).
+4. Copy the webhook's signing secret into `LOB_WEBHOOK_SECRET` in Railway.
+5. Create the same webhook in both Test and Live environments if you want it to
+   work in both — Lob keeps them separate.
+
+Every delivery is authenticated by its `Lob-Signature` header, an HMAC of the
+timestamp and the exact request body. Deliveries that are unsigned, wrongly
+signed, or more than five minutes old are refused, so the endpoint is safe to
+expose without the add-in's token (Lob cannot send one).
+
+Events are held in memory and lost when Railway restarts the service. To keep a
+durable trail, attach a Railway volume and set `EVENT_LOG_PATH` to a file on it
+(e.g. `/data/lob-events.jsonl`); each event is appended as one JSON line.
+
+The task pane's **Recent mail** section lists recent letters from Lob with the
+latest status for each.
+
+## 8. Canceling a letter
+
+Lob accepts a cancellation until the letter's `send_date` — five minutes after
+creation on a default account, and free of charge. The results card shows a live
+countdown and a **Cancel this letter** button for each mailing; after the window
+closes the button reports that the letter has gone to print.
+
+The countdown is driven by the `send_date` Lob returns, so if the firm's
+cancellation window is ever changed in the Lob dashboard, the pane follows it
+without a code change.
+
+## 9. Checking addresses
+
+**This needs a live Lob key.** On a test key Lob validates the request but
+returns an empty result, so the button in the task pane says so rather than
+pretending the address is bad.
+
+**Check this address with USPS** under the recipient (and under each copy) runs
+Lob's US verification and reports one of: deliverable, deliverable but the
+suite/unit is unnecessary, incorrect, or missing, or undeliverable. When USPS
+standardizes the address, the pane shows what it would become and offers **Use
+the USPS version** — it never rewrites what was typed on its own.
+
+Each check is a billable Lob lookup, which is why it is a button rather than
+something that runs on every keystroke. Setting `VERIFY_BEFORE_SEND=true` also
+checks every recipient during a send and refuses the whole batch if any address
+is undeliverable — nothing is mailed, so a bad CC cannot leave you with a
+half-sent letter. If the verification service itself is down, the send proceeds
+and Lob's own validation at creation time still applies.
+
 ---
 
 ## Where the address block goes
@@ -165,6 +224,10 @@ wrong USPS use type for legal correspondence.
 | "Hourly limit reached" | The spend guardrail (`MAX_LETTERS_PER_HOUR`) stopped the request. Raise it in Railway if the firm genuinely sends more. |
 | A CC copy failed but the main letter went | The response lists each mailing separately. Fix that address and send only that copy — re-sending the whole letter would mail the addressee twice. |
 | Nothing happens when the ribbon button is clicked | The manifest points at a URL Word cannot reach. Open the Railway URL in a browser; check `/addin/taskpane.html` loads. |
+| "Address check needs a live Lob key" | Expected on a `test_` key — Lob returns no verification data there. |
+| Cancel says the letter can no longer be canceled | The `send_date` has passed; Lob has sent it to print. Nothing can pull it back. |
+| Recent mail shows no statuses | `LOB_WEBHOOK_SECRET` is unset, or the webhook was created in the other Lob environment (test vs. live). Check the Railway logs for `webhook.rejected`. |
+| Webhook deliveries fail in the Lob dashboard | A 401 means the signature or timestamp did not check out — usually the wrong secret. A 503 means `LOB_WEBHOOK_SECRET` is not set on the service. |
 
 ## Local development
 
