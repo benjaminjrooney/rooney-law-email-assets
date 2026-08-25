@@ -1,0 +1,21 @@
+{
+  "name": "rooney-law-mail",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Word add-in and Railway backend for mailing letters through Lob",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/backend"
+  ],
+  "scripts": {
+    "start": "node apps/backend/src/index.js",
+    "dev": "node --watch apps/backend/src/index.js",
+    "test": "node --test --test-reporter=spec",
+    "manifest": "node apps/word-addin/tools/build-manifest.mjs",
+    "icons": "node apps/word-addin/tools/make-icons.mjs"
+  },
+  "license": "UNLICENSED"
+}
