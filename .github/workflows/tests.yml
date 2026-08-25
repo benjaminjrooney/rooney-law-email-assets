@@ -1,0 +1,66 @@
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  # Fast feedback: the backend, parser, and validation suites. The task pane
+  # tests skip themselves here because Playwright is not installed.
+  unit:
+    name: Backend and parser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  # The task pane driven in a real browser with a stubbed Office.js. Separate
+  # job so a browser download never delays the fast suite.
+  taskpane:
+    name: Task pane (headless Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Playwright is deliberately not a dependency of this repo, so a normal
+      # install stays small; CI adds it just for these two tests.
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
+  # The manifest is generated, not committed: make sure the template still
+  # produces well-formed XML with every placeholder filled.
+  manifest:
+    name: Manifest builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run manifest -- --base-url https://example.up.railway.app
+      - name: Check the built manifest
+        run: |
+          node -e "
+            const fs = require('node:fs');
+            const manifest = fs.readFileSync('apps/word-addin/build/manifest.xml', 'utf8');
+            if (manifest.includes('{{')) throw new Error('manifest has unfilled placeholders');
+            if (!manifest.includes('https://example.up.railway.app/addin/taskpane.html')) {
+              throw new Error('manifest is missing the task pane URL');
+            }
+            console.log('manifest looks good');
+          "
+      - name: Check the XML parses
+        run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('apps/word-addin/build/manifest.xml'); print('well-formed')"

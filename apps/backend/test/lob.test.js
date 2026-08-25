@@ -111,6 +111,42 @@ test('a 4xx from Lob keeps its status and message', async () => {
   );
 });
 
+test('a rejected Lob key is reported as a server problem, not a client auth failure', async () => {
+  let attempts = 0;
+  const client = new LobClient({
+    apiKey: 'live_wrong',
+    fetchImpl: async () => {
+      attempts += 1;
+      return jsonResponse(401, { error: { message: 'Your API key is not valid', code: 'unauthorized' } });
+    },
+  });
+
+  await assert.rejects(
+    () => client.createLetter(LETTER),
+    (error) => {
+      // 502, not 401: the add-in must not read this as "your access token was
+      // rejected" and re-prompt for the wrong credential.
+      assert.equal(error.statusCode, 502);
+      assert.match(error.message, /Lob rejected the mail service's API key/);
+      assert.match(error.message, /Your API key is not valid/, 'Lob’s own words are kept');
+      assert.match(error.message, /LOB_API_KEY/);
+      return true;
+    },
+  );
+  assert.equal(attempts, 1, 'a bad key is never worth retrying');
+});
+
+test('a 403 from Lob is treated the same way', async () => {
+  const client = new LobClient({
+    apiKey: 'test_key',
+    fetchImpl: async () => jsonResponse(403, { error: { message: 'forbidden' } }),
+  });
+  await assert.rejects(() => client.getLetter('ltr_1'), (error) => {
+    assert.equal(error.statusCode, 502);
+    return true;
+  });
+});
+
 test('server errors are retried, then reported', async () => {
   let attempts = 0;
   const client = new LobClient({

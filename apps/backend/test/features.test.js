@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createApp } from '../src/app.js';
-import { LobError, summarizeVerification } from '../src/lob.js';
+import { LobClient, LobError, summarizeVerification } from '../src/lob.js';
 import { EventStore } from '../src/event-store.js';
 import { expectedSignature } from '../src/webhook.js';
 import { testConfig, startServer, letterForm, FakeLob, VALID_PAYLOAD, TEST_TOKEN } from './helpers.js';
@@ -305,6 +305,32 @@ test('recent mailings come from Lob and carry the latest tracking event', async 
     },
     { config },
   );
+});
+
+// ------------------------------------------------- upstream vs client auth --
+
+test('a bad Lob key does not make the add-in ask for its own token again', async () => {
+  // A real LobClient, so the 401 travels the same path a live misconfiguration
+  // would: Lob rejects the server's key mid-send.
+  const lob = new LobClient({
+    apiKey: 'live_wrong',
+    fetchImpl: async () => new Response(JSON.stringify({ error: { message: 'Your API key is not valid' } }), {
+      status: 401,
+      headers: { 'content-type': 'application/json' },
+    }),
+  });
+
+  const server = await startServer(createApp({ config: testConfig(), lobClient: lob }));
+  try {
+    const { status, body } = await server.post('/api/letters', { body: letterForm(VALID_PAYLOAD) });
+
+    assert.notEqual(status, 401, 'a 401 here would make the task pane re-prompt for the access token');
+    assert.notEqual(status, 403);
+    assert.equal(status, 502);
+    assert.match(body.error.message, /LOB_API_KEY/);
+  } finally {
+    await server.close();
+  }
 });
 
 test('recent mailings need the API token', async () => {

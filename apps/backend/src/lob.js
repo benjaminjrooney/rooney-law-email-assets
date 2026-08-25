@@ -98,6 +98,17 @@ export class LobClient {
       const lobMessage = parsed?.error?.message ?? raw.slice(0, 500) ?? 'Unknown Lob error';
       const lobCode = parsed?.error?.code ?? null;
 
+      // A 401/403 here means *Lob* rejected this server's API key, which has
+      // nothing to do with the add-in's own token. Passing the status straight
+      // through would make the task pane blame the user's access token and
+      // re-prompt for it, sending them after the wrong credential.
+      if (response.status === 401 || response.status === 403) {
+        throw new LobError(
+          `Lob rejected the mail service's API key (Lob said: ${lobMessage}). Check LOB_API_KEY on the server.`,
+          { statusCode: 502, lobCode, requestId },
+        );
+      }
+
       if (RETRYABLE_STATUSES.has(response.status) && attempt < retries) {
         lastError = new LobError(lobMessage, { statusCode: response.status, lobCode, requestId });
         await sleep(500 * 2 ** attempt);
