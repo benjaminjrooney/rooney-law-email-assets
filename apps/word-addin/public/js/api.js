@@ -76,6 +76,17 @@ export class ApiClient {
     return this.request('/api/letters', { method: 'POST', body: form });
   }
 
+  /**
+   * Price the send without doing it. Same inputs as createLetters; nothing is
+   * created and Lob is never called.
+   */
+  async estimate({ pdf, filename, payload }) {
+    const form = new FormData();
+    form.append('payload', JSON.stringify(payload));
+    form.append('file', pdf, filename);
+    return this.request('/api/estimate', { method: 'POST', body: form });
+  }
+
   getLetter(id) {
     return this.request(`/api/letters/${encodeURIComponent(id)}`);
   }

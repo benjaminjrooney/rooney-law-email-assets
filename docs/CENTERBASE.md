@@ -34,6 +34,12 @@ but failed to post its expense is a retry, not a re-send.
 - **The backend already brokers a secret.** A Centerbase credential is one more
   server-side environment variable and one more small client module beside
   `apps/backend/src/lob.js`; nothing about it needs to reach Word.
+- **The amount is already calculated.** Every send returns a per-letter
+  `estimate` (with a breakdown) and a `total`, and `POST /api/estimate` prices a
+  send without creating anything. The expense entry has a number to post.
+- **Letters can already be tagged for invoicing.** `billingGroupId` is passed
+  through to Lob, so once a matter is chosen it can group the letter on the Lob
+  invoice as well as in Centerbase.
 
 ## What to settle before building
 
@@ -42,11 +48,17 @@ but failed to post its expense is a retry, not a re-send.
    firm's own account: authentication (API key vs. OAuth), the base URL, and the
    object name for a cost/expense entry, since Centerbase models records as
    configurable objects rather than fixed REST resources.
-2. **Where the amount comes from.** Lob's letter response does not include a
-   price, so the expense amount has to come from either a configured price table
-   per mail class (simplest, and easy to keep current from Lob's pricing page) or
-   from Lob's billing data after the fact. A price table plus a monthly
-   reconciliation against the Lob invoice is the pragmatic starting point.
+2. ~~**Where the amount comes from.**~~ **Settled.** Verified against Lob's
+   OpenAPI spec: there is no price field on the letter object in any variant, no
+   pricing or invoice endpoint, and `billing_groups` carries only labels. The
+   amount therefore comes from the price table now built into the service
+   (`apps/backend/src/pricing.js`, rates in `RATE_*` environment variables), and
+   every send already returns a per-letter `estimate` and a `total`. That is
+   what the expense entry should post.
+
+   Because it is an estimate, letters also accept a `billingGroupId` that is
+   passed through to Lob, so the monthly invoice breaks down by client or matter
+   and can be reconciled against the letter IDs recorded here.
 3. **Matter selection.** Whether to fetch the matter list from Centerbase live
    (needs a search endpoint and caching) or let the user type a matter number
    that the server validates.

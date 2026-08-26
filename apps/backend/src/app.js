@@ -11,6 +11,7 @@ import { LetterRateLimiter } from './rate-limit.js';
 import { configProblems } from './config.js';
 import { EventStore } from './event-store.js';
 import { verifyWebhook } from './webhook.js';
+import { estimateLetterCost, sumEstimates } from './pricing.js';
 import {
   MAIL_CLASSES,
   ADDRESS_PLACEMENTS,
@@ -128,50 +129,98 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
         verifyBeforeSend: config.verifyBeforeSend,
         tracking: Boolean(config.lob.webhookSecret),
         cancellationWindowMinutes: config.lob.cancellationWindowMinutes,
+        costEstimate: config.rates.configured,
       },
     });
   });
 
   // ---------------------------------------------------------------- letters --
 
+  /**
+   * Shared front half of /api/letters and /api/estimate: check the upload,
+   * validate the payload, and work out the mailings and what each would cost.
+   *
+   * @returns {{failure: {status: number, body: object}} | {value: object, pages: number|null, mailings: object[]}}
+   */
+  function readLetterRequest(req) {
+    const fail = (status, message, details) => ({ failure: { status, body: { error: { message, details } } } });
+
+    if (!req.file) return fail(400, 'No PDF was uploaded (form field "file").');
+    if (!looksLikePdf(req.file.buffer)) {
+      return fail(400, 'The uploaded file is not a PDF. Export the document as PDF and try again.');
+    }
+
+    let payload;
+    try {
+      payload = typeof req.body.payload === 'string' ? JSON.parse(req.body.payload) : req.body.payload;
+    } catch {
+      return fail(400, 'Form field "payload" is not valid JSON.');
+    }
+
+    const { errors, value } = validateLetterRequest(payload, config);
+    if (errors.length > 0) return fail(400, errors[0], errors);
+
+    const pages = estimatePageCount(req.file.buffer);
+    const pageLimit = value.options.doubleSided ? MAX_PAGES_DOUBLE_SIDED : MAX_PAGES_SINGLE_SIDED;
+    if (pages !== null && pages > pageLimit) {
+      return fail(400, `This document is about ${pages} pages; Lob's limit is ${pageLimit} for this setting.`);
+    }
+
+    // One physical letter per recipient: the addressee plus every CC copy.
+    const mailings = [
+      { role: 'to', address: value.to, mailClass: value.mailClass },
+      ...value.cc.map((entry) => ({ role: 'cc', address: entry.address, mailClass: entry.mailClass })),
+    ];
+
+    for (const mailing of mailings) {
+      // Certified and registered letters carry Lob's own cover sheet, so no
+      // address page is inserted and none is priced.
+      mailing.addressPlacement = mailing.mailClass.extraService ? null : value.options.addressPlacement;
+      mailing.estimate = estimateLetterCost({
+        mailClass: mailing.mailClass,
+        pages,
+        color: value.options.color,
+        doubleSided: value.options.doubleSided,
+        addressPlacement: mailing.addressPlacement,
+        rates: config.rates,
+      });
+    }
+
+    return { value, pages, mailings };
+  }
+
+  /**
+   * Price a send without doing it: same inputs as /api/letters, no Lob call,
+   * nothing created, nothing charged.
+   */
+  app.post('/api/estimate', guard, upload.single('file'), (req, res, next) => {
+    try {
+      const parsed = readLetterRequest(req);
+      if (parsed.failure) return res.status(parsed.failure.status).json(parsed.failure.body);
+
+      const { pages, mailings } = parsed;
+      return res.json({
+        pages,
+        mode: lob.isLive ? 'live' : 'test',
+        total: sumEstimates(mailings.map((mailing) => mailing.estimate), config.rates.currency),
+        mailings: mailings.map((mailing) => ({
+          role: mailing.role,
+          mailClass: mailing.mailClass.id,
+          recipient: mailing.address.name || mailing.address.company,
+          estimate: mailing.estimate,
+        })),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.post('/api/letters', guard, upload.single('file'), async (req, res, next) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: { message: 'No PDF was uploaded (form field "file").' } });
-      }
-      if (!looksLikePdf(req.file.buffer)) {
-        return res.status(400).json({
-          error: { message: 'The uploaded file is not a PDF. Export the document as PDF and try again.' },
-        });
-      }
+      const parsed = readLetterRequest(req);
+      if (parsed.failure) return res.status(parsed.failure.status).json(parsed.failure.body);
 
-      let payload;
-      try {
-        payload = typeof req.body.payload === 'string' ? JSON.parse(req.body.payload) : req.body.payload;
-      } catch {
-        return res.status(400).json({ error: { message: 'Form field "payload" is not valid JSON.' } });
-      }
-
-      const { errors, value } = validateLetterRequest(payload, config);
-      if (errors.length > 0) {
-        return res.status(400).json({ error: { message: errors[0], details: errors } });
-      }
-
-      const pages = estimatePageCount(req.file.buffer);
-      const pageLimit = value.options.doubleSided ? MAX_PAGES_DOUBLE_SIDED : MAX_PAGES_SINGLE_SIDED;
-      if (pages !== null && pages > pageLimit) {
-        return res.status(400).json({
-          error: {
-            message: `This document is about ${pages} pages; Lob's limit is ${pageLimit} for this setting.`,
-          },
-        });
-      }
-
-      // One physical letter per recipient: the addressee plus every CC copy.
-      const mailings = [
-        { role: 'to', address: value.to, mailClass: value.mailClass },
-        ...value.cc.map((entry) => ({ role: 'cc', address: entry.address, mailClass: entry.mailClass })),
-      ];
+      const { value, pages, mailings } = parsed;
 
       const allowance = limiter.check(mailings.length);
       if (!allowance.allowed) {
@@ -224,18 +273,23 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
             extraService: mailing.mailClass.extraService,
             color: value.options.color,
             doubleSided: value.options.doubleSided,
-            // Certified/registered letters get a Lob-generated cover sheet that
-            // already carries the address block, so no placement is sent.
-            addressPlacement: mailing.mailClass.extraService ? null : value.options.addressPlacement,
+            addressPlacement: mailing.addressPlacement,
             description,
             useType: config.lob.useType,
             metadata: { ...value.metadata, role: mailing.role },
             idempotencyKey: `${baseKey}:${index}`,
+            billingGroupId: value.billingGroupId,
           });
 
           limiter.record(1);
           const summary = summarizeLetter(letter);
-          results.push({ role: mailing.role, ok: true, mailClass: mailing.mailClass.id, letter: summary });
+          results.push({
+            role: mailing.role,
+            ok: true,
+            mailClass: mailing.mailClass.id,
+            letter: summary,
+            estimate: mailing.estimate,
+          });
           log('letter.created', {
             id: summary.id,
             role: mailing.role,
@@ -275,6 +329,11 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
         ok: failures === 0,
         mode: lob.isLive ? 'live' : 'test',
         pages,
+        // Only what actually went out is priced.
+        total: sumEstimates(
+          results.filter((result) => result.ok).map((result) => result.estimate),
+          config.rates.currency,
+        ),
         mailings: results,
       });
     } catch (error) {

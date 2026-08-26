@@ -206,6 +206,13 @@ export function validateLetterRequest(payload, config) {
     errors.push('idempotencyKey must be 256 characters or fewer.');
   }
 
+  // Optional Lob billing group, so the invoice can be broken down per client or
+  // matter. Groundwork for the Centerbase billing step.
+  const billingGroupId = text(payload.billingGroupId);
+  if (billingGroupId && !/^[\w-]{1,64}$/.test(billingGroupId)) {
+    errors.push('billingGroupId must be 64 characters or fewer, letters, numbers, dashes and underscores only.');
+  }
+
   if (errors.length > 0) return { errors };
 
   return {
@@ -218,6 +225,7 @@ export function validateLetterRequest(payload, config) {
       options: { color, doubleSided, addressPlacement, description },
       metadata,
       idempotencyKey,
+      billingGroupId,
     },
   };
 }

@@ -154,6 +154,7 @@ export class LobClient {
     useType,
     metadata = {},
     idempotencyKey,
+    billingGroupId,
   }) {
     const form = new FormData();
     appendAddress(form, 'to', to);
@@ -166,6 +167,9 @@ export class LobClient {
     if (addressPlacement) form.append('address_placement', addressPlacement);
     if (description) form.append('description', description);
     if (useType) form.append('use_type', useType);
+    // Groups this letter on the Lob invoice, so postage can be reconciled per
+    // client or matter later.
+    if (billingGroupId) form.append('billing_group_id', billingGroupId);
     for (const [key, value] of Object.entries(metadata)) {
       form.append(`metadata[${key}]`, String(value));
     }

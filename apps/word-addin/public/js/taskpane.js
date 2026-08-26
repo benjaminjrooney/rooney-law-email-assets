@@ -564,6 +564,96 @@ function resetConfirm() {
   el('send').textContent = 'Send letter';
 }
 
+// --------------------------------------------------------------- confirm --
+
+function formatMoney(amount, currency = 'USD') {
+  if (amount === null || amount === undefined) return null;
+  return currency === 'USD' ? `$${amount.toFixed(2)}` : `${amount.toFixed(2)} ${currency}`;
+}
+
+/**
+ * Price the send before asking for confirmation.
+ *
+ * Lob does not return a price when a letter is created, so the cost is worked
+ * out on the server from the firm's configured rates. That needs the page
+ * count, which needs the PDF — so the document is exported here and again at
+ * send time, keeping the mailed PDF current if the document changes in between.
+ */
+async function askForConfirmation(letterCount) {
+  const live = state.config?.lobMode === 'live';
+  el('send').disabled = true;
+  el('send').textContent = 'Checking…';
+
+  const progress = showMessage('info', 'Exporting the document to price the send…', {
+    spinner: true,
+    replace: true,
+  });
+
+  let quote = null;
+  try {
+    const { blob } = await exportDocumentPdf();
+    quote = await state.client.estimate({
+      pdf: blob,
+      filename: documentPdfName(),
+      payload: buildPayload(),
+    });
+  } catch (error) {
+    progress.remove();
+    el('send').disabled = false;
+    if (error instanceof ExportError) {
+      // If the document cannot be exported now it cannot be mailed either.
+      reportSendError(error);
+      resetConfirm();
+      return;
+    }
+    if (error instanceof ApiError && error.isAuth) {
+      reportSendError(error);
+      resetConfirm();
+      return;
+    }
+    // Anything else is only a pricing failure: say so and let the send proceed.
+    showMessage('warn', `Could not price this send: ${error?.message ?? error}`, { replace: true });
+  }
+
+  progress.remove();
+  el('send').disabled = false;
+  state.awaitingConfirm = true;
+
+  const costLabel = quote?.total?.available ? formatMoney(quote.total.total, quote.total.currency) : null;
+  const noun = letterCount === 1 ? 'letter' : 'letters';
+  el('send').textContent = live
+    ? `Confirm — mail ${letterCount} ${noun}${costLabel ? ` (${costLabel})` : ''}`
+    : `Confirm — create ${letterCount} test ${noun}`;
+
+  const items = [];
+  if (quote?.pages) {
+    items.push(`${quote.pages} page${quote.pages === 1 ? '' : 's'} exported from this document.`);
+  }
+  for (const mailing of quote?.mailings ?? []) {
+    const each = mailing.estimate?.available
+      ? formatMoney(mailing.estimate.total, mailing.estimate.currency)
+      : 'cost unknown';
+    const role = mailing.role === 'cc' ? 'Copy' : 'Recipient';
+    items.push(`${role} — ${mailing.recipient}: ${each}`);
+  }
+  if (quote && !quote.total?.available) {
+    const note = quote.mailings?.find((mailing) => mailing.estimate?.notes?.length > 0)?.estimate.notes[0];
+    if (note) items.push(note);
+  }
+
+  showMessage(
+    live ? 'warn' : 'info',
+    live
+      ? `This will print and mail ${letterCount} ${noun} through Lob${costLabel ? `, about ${costLabel} in postage` : ''}. Charged to the firm account.`
+      : 'The service is in test mode: Lob will create the letters but nothing is printed or mailed.',
+    { items, replace: true },
+  );
+
+  if (costLabel) {
+    showMessage('info', 'The cost is an estimate from the configured rates — reconcile against the Lob invoice.');
+  }
+}
+
 // ------------------------------------------------------------------- send --
 
 async function handleSubmit(event) {
@@ -580,18 +670,7 @@ async function handleSubmit(event) {
 
   const total = 1 + state.ccRows.filter((row) => row.toggle.checked).length;
   if (!state.awaitingConfirm) {
-    state.awaitingConfirm = true;
-    const live = state.config?.lobMode === 'live';
-    el('send').textContent = live
-      ? `Confirm — mail ${total} ${total === 1 ? 'letter' : 'letters'}`
-      : `Confirm — create ${total} test ${total === 1 ? 'letter' : 'letters'}`;
-    showMessage(
-      live ? 'warn' : 'info',
-      live
-        ? 'This will print and mail the document through Lob. Postage will be charged to the firm account.'
-        : 'The service is in test mode: Lob will create the letters but nothing is printed or mailed.',
-      { replace: true },
-    );
+    await askForConfirmation(total);
     return;
   }
 

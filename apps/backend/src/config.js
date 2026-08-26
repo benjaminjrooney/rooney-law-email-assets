@@ -5,6 +5,8 @@
  * that no address, key, or default is hard-coded anywhere else in the service.
  */
 
+import { loadRates } from './pricing.js';
+
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 
@@ -79,6 +81,9 @@ export function loadConfig(env = process.env) {
     // Address checking costs a Lob lookup per call and only returns real
     // results on a live key, so it is opt-in rather than automatic.
     verifyBeforeSend: bool('VERIFY_BEFORE_SEND', false, env),
+
+    // Postage rates for the cost estimate. Unset means no estimate is shown.
+    rates: loadRates(env),
 
     events: {
       // Append tracking events here as JSON lines, e.g. a Railway volume at

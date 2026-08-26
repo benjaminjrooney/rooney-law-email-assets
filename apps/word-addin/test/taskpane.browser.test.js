@@ -145,9 +145,14 @@ async function openTaskPane({ browser, lob = new FakeLob(), config = testConfig(
   };
 }
 
-/** Two clicks: the first asks for confirmation, the second actually sends. */
+/**
+ * Two clicks: the first prices the send and asks for confirmation, the second
+ * actually sends. The first is asynchronous — it exports the PDF and calls the
+ * estimate endpoint — so wait for the button to come back before clicking again.
+ */
 async function sendLetter(page) {
   await page.click('#send');
+  await page.waitForSelector('#send:not([disabled])');
   await page.click('#send');
   await page.waitForSelector('#results:not([hidden])');
 }
@@ -179,6 +184,7 @@ test('task pane reads the letter, pre-fills it and sends it', { skip: chromium ?
     assert.match(await page.textContent('#mode-badge'), /test mode/);
 
     await page.click('#send');
+    await page.waitForSelector('#send:not([disabled])');
     assert.match(await page.textContent('#send'), /Confirm/);
     await page.click('#send');
 
@@ -305,6 +311,66 @@ test('on a test key the address check says why it cannot run', { skip: chromium 
     assert.match(await pane.page.textContent('#check-to'), /needs a live Lob key/);
     assert.equal(await pane.page.isDisabled('#check-to'), true);
     assert.equal(await pane.page.isDisabled('#cc-0-enabled'), false, 'the rest of the pane still works');
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('the confirm step shows the page count and the estimated cost', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  // Illustrative rates only — the real ones come from the firm's Lob invoice.
+  const config = testConfig({
+    env: { RATE_BASE: '1.00', RATE_EXTRA_PAGE: '0.10', RATE_CERTIFIED_RETURN_RECEIPT: '8.46' },
+  });
+  const pane = await openTaskPane({ browser, config, lob: new FakeLob({ isLive: true }) });
+  const { page } = pane;
+
+  try {
+    await page.waitForSelector('#letter-form:not([hidden])');
+    await page.click('#send');
+
+    // Certified with return receipt: 1.00 + 8.46. The regular CC copy adds
+    // 1.00 plus 0.10 for the inserted address page.
+    await page.waitForSelector('#send:not([disabled])');
+    assert.match(await page.textContent('#send'), /Confirm — mail 2 letters \(\$10\.56\)/);
+
+    const status = await page.textContent('#status');
+    assert.match(status, /1 page exported/);
+    assert.match(status, /Recipient — Jane Doe, Esq\.: \$9\.46/);
+    assert.match(status, /Copy — Robert Roe: \$1\.10/);
+    assert.match(status, /about \$10\.56 in postage/);
+    assert.match(status, /estimate .*reconcile against the Lob invoice/);
+
+    // The estimate must not have created anything.
+    assert.equal(pane.lob.calls.length, 0);
+
+    await page.click('#send');
+    await page.waitForSelector('#results:not([hidden])');
+    assert.equal(pane.lob.calls.length, 2);
+    assert.deepEqual(pane.errors, []);
+  } finally {
+    await pane.close();
+    await browser.close();
+  }
+});
+
+test('with no rates configured the confirm step simply omits the cost', { skip: chromium ? false : 'playwright not installed' }, async (t) => {
+  const browser = await launchBrowser();
+  if (!browser) return t.skip(SKIP_REASON);
+
+  const pane = await openTaskPane({ browser, lob: new FakeLob({ isLive: true }) });
+  try {
+    await pane.page.waitForSelector('#letter-form:not([hidden])');
+    await pane.page.click('#send');
+    await pane.page.waitForSelector('#send:not([disabled])');
+
+    const label = await pane.page.textContent('#send');
+    assert.match(label, /Confirm — mail 2 letters/);
+    assert.doesNotMatch(label, /\$/, 'no invented price');
+    assert.match(await pane.page.textContent('#status'), /1 page exported/);
   } finally {
     await pane.close();
     await browser.close();

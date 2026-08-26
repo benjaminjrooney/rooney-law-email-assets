@@ -307,6 +307,147 @@ test('recent mailings come from Lob and carry the latest tracking event', async 
   );
 });
 
+// -------------------------------------------------------- cost estimation --
+
+/** Illustrative rates only — the real ones come from the firm's Lob invoice. */
+const RATE_ENV = {
+  RATE_BASE: '1.00',
+  RATE_EXTRA_PAGE: '0.10',
+  RATE_CERTIFIED: '5.55',
+  RATE_CERTIFIED_RETURN_RECEIPT: '8.46',
+};
+
+test('an estimate prices the send without creating anything', async () => {
+  const config = testConfig({ env: RATE_ENV });
+  await withServer(
+    async ({ server, lob }) => {
+      const { status, body } = await server.post('/api/estimate', {
+        body: letterForm({
+          ...VALID_PAYLOAD,
+          mailClass: 'certified_return_receipt',
+          cc: [
+            {
+              name: 'Robert Roe',
+              address_line1: '1 North Wacker Drive',
+              address_city: 'Chicago',
+              address_state: 'IL',
+              address_zip: '60606',
+              mailClass: 'regular',
+            },
+          ],
+        }),
+      });
+
+      assert.equal(status, 200);
+      assert.equal(body.pages, 1);
+      assert.equal(body.mailings.length, 2);
+      // Certified: 1.00 + 8.46, no address page. Regular CC: 1.00 + the
+      // inserted address page at 0.10.
+      assert.equal(body.mailings[0].estimate.total, 9.46);
+      assert.equal(body.mailings[1].estimate.total, 1.1);
+      assert.equal(body.total.total, 10.56);
+      assert.equal(body.total.letters, 2);
+
+      assert.equal(lob.calls.length, 0, 'estimating never touches Lob');
+    },
+    { config },
+  );
+});
+
+test('without configured rates the estimate is withheld, not guessed', async () => {
+  await withServer(async ({ server }) => {
+    const { status, body } = await server.post('/api/estimate', { body: letterForm(VALID_PAYLOAD) });
+    assert.equal(status, 200);
+    assert.equal(body.total.available, false);
+    assert.equal(body.total.total, null);
+    assert.match(body.mailings[0].estimate.notes[0], /not configured/);
+
+    const config = await server.get('/api/config');
+    assert.equal(config.body.features.costEstimate, false);
+  });
+});
+
+test('estimating validates the same way sending does', async () => {
+  await withServer(async ({ server }) => {
+    const bad = await server.post('/api/estimate', { body: letterForm({ to: { name: 'Jane Doe' } }) });
+    assert.equal(bad.status, 400);
+    assert.ok(bad.body.error.details.length >= 3);
+
+    assert.equal((await server.post('/api/estimate', { body: letterForm(VALID_PAYLOAD), token: null })).status, 401);
+  });
+});
+
+test('a sent letter carries the same estimate back', async () => {
+  const config = testConfig({ env: RATE_ENV });
+  await withServer(
+    async ({ server }) => {
+      const { status, body } = await server.post('/api/letters', {
+        body: letterForm({ ...VALID_PAYLOAD, mailClass: 'certified' }),
+      });
+      assert.equal(status, 201);
+      assert.equal(body.mailings[0].estimate.total, 6.55);
+      assert.equal(body.total.total, 6.55);
+      assert.equal(body.total.letters, 1);
+    },
+    { config },
+  );
+});
+
+test('a failed copy is left out of the total', async () => {
+  const config = testConfig({ env: RATE_ENV });
+  const lob = new FakeLob({
+    respond: (letter, index) => {
+      if (letter.to.name === 'Robert Roe') throw new LobError('undeliverable', { statusCode: 422 });
+      return { id: `ltr_${index}`, to: letter.to };
+    },
+  });
+
+  await withServer(
+    async ({ server }) => {
+      const { status, body } = await server.post('/api/letters', {
+        body: letterForm({
+          ...VALID_PAYLOAD,
+          cc: [
+            {
+              name: 'Robert Roe',
+              address_line1: '1 North Wacker Drive',
+              address_city: 'Chicago',
+              address_state: 'IL',
+              address_zip: '60606',
+            },
+          ],
+        }),
+      });
+
+      assert.equal(status, 207);
+      assert.equal(body.total.letters, 1, 'only the letter that went out is priced');
+      assert.equal(body.total.total, 1.1);
+    },
+    { config, lob },
+  );
+});
+
+test('a billing group is passed through to Lob for per-matter invoicing', async () => {
+  await withServer(async ({ server, lob }) => {
+    const { status } = await server.post('/api/letters', {
+      body: letterForm({ ...VALID_PAYLOAD, billingGroupId: 'bg_matter_2026_014' }),
+    });
+    assert.equal(status, 201);
+    assert.equal(lob.calls[0].billingGroupId, 'bg_matter_2026_014');
+  });
+});
+
+test('a malformed billing group is rejected', async () => {
+  await withServer(async ({ server, lob }) => {
+    const { status, body } = await server.post('/api/letters', {
+      body: letterForm({ ...VALID_PAYLOAD, billingGroupId: 'not a valid id!' }),
+    });
+    assert.equal(status, 400);
+    assert.match(body.error.message, /billingGroupId/);
+    assert.equal(lob.calls.length, 0);
+  });
+});
+
 // ------------------------------------------------- upstream vs client auth --
 
 test('a bad Lob key does not make the add-in ask for its own token again', async () => {

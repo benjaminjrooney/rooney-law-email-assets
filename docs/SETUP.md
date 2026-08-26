@@ -184,6 +184,44 @@ is undeliverable — nothing is mailed, so a bad CC cannot leave you with a
 half-sent letter. If the verification service itself is down, the send proceeds
 and Lob's own validation at creation time still applies.
 
+## 10. Postage cost (optional)
+
+**Lob's API does not return what a letter cost.** There is no price field on the
+letter object and no pricing endpoint — `billing_groups` carries only labels,
+and `/accounts/credits_balance` is an account-level figure. So the cost shown
+before sending is worked out on the server from rates you supply.
+
+Those rates ship blank on purpose. Lob does not publish a fixed price list;
+per-piece pricing depends on the account's Print & Mail Edition and volume. With
+`RATE_BASE` unset, no cost appears anywhere — which is the right behaviour,
+because a plausible-looking guess would end up on a client's invoice.
+
+To turn it on, take the real numbers off a Lob invoice or the pricing page in
+the dashboard and set them in Railway:
+
+```
+RATE_BASE=                       # one-page black-and-white first-class letter
+RATE_EXTRA_PAGE=                 # each page beyond the first
+RATE_CERTIFIED=
+RATE_CERTIFIED_RETURN_RECEIPT=
+RATE_REGISTERED=
+```
+
+Then the confirm step shows the page count, a per-letter cost, and the total
+before anything is sent. The estimate accounts for the address page Lob inserts,
+and does not charge for the cover sheet Lob adds to certified mail (Lob states
+that sheet is free). If a rate is missing for the class being sent — certified,
+say — the estimate is withheld rather than quoted low.
+
+For reference, USPS's own certified fee was $5.55 and the electronic return
+receipt $2.91 as of July 2026 ([USPS certified mail
+costs](https://www.postgrid.com/usps-certified-mail-costs-rates/)) — but what
+Lob charges the firm is what belongs in the config.
+
+**Every figure is an estimate.** Reconcile against the Lob invoice; setting a
+`billingGroupId` per client or matter (passed through to Lob) makes that
+reconciliation straightforward. See [`docs/CENTERBASE.md`](CENTERBASE.md).
+
 ---
 
 ## Where the address block goes
