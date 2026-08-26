@@ -346,10 +346,29 @@ function addressLinesAbove(lines, cityIndex, floor) {
   return collected;
 }
 
-/** The firm's own address, from the letterhead or the signature block. */
+/** Compare street lines ignoring punctuation and spacing ("217 S. Third St." ≡ "217 S Third St"). */
+function sameStreet(a, b) {
+  const normalize = (value) =>
+    String(value ?? '')
+      .toLowerCase()
+      .replace(/[.,]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const left = normalize(a);
+  return left !== '' && left === normalize(b);
+}
+
+/**
+ * The firm's own address, from the letterhead or the signature block.
+ *
+ * Matching on ZIP alone is wrong and was actively harmful: a firm mails to
+ * plenty of people in its own town, and every one of them was being discarded
+ * as letterhead, leaving the recipient blank with no explanation of why. The
+ * street line is the field that actually identifies the firm's own address, and
+ * the firm's name catches the letterhead when its street is not configured.
+ */
 function isOwnAddress(address, options) {
-  const zip = String(options.excludeZip ?? '').slice(0, 5);
-  if (zip && address.address_zip.startsWith(zip)) return true;
+  if (sameStreet(address.address_line1, options.excludeLine1)) return true;
 
   const company = String(options.excludeCompany ?? '').trim().toLowerCase();
   if (
@@ -441,7 +460,7 @@ function extractInlineMethod(line) {
  *
  * @param {string} documentText
  * @param {object} [options]
- * @param {string} [options.excludeZip] the firm's own ZIP, so letterhead is skipped
+ * @param {string} [options.excludeLine1] the firm's own street, so letterhead is skipped
  * @param {string} [options.excludeCompany] the firm's own name, likewise
  * @returns {{
  *   mailClass: string,

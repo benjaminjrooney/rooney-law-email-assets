@@ -19,6 +19,9 @@ const LETTERHEAD = [
   '',
 ];
 
+/** The street on LETTERHEAD, i.e. what the add-in passes as the firm's own. */
+const LETTERHEAD_STREET = '123 North LaSalle Street, Suite 1200';
+
 function letter(lines) {
   return lines.join('\n');
 }
@@ -130,7 +133,7 @@ test('parses a full certified letter with a CC block', () => {
     'Chicago, IL 60606',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602', excludeCompany: 'Rooney Law' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET, excludeCompany: 'Rooney Law' });
 
   assert.equal(result.mailClass, 'certified_return_receipt');
   assert.equal(result.deliveryDetected, true);
@@ -165,7 +168,7 @@ test('never picks the firm letterhead as the recipient', () => {
     'Please call the office at your convenience.',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602', excludeCompany: 'Rooney Law' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET, excludeCompany: 'Rooney Law' });
   assert.equal(result.recipient.name, 'Mr. John Smith');
   assert.equal(result.recipient.address_zip, '60608');
 });
@@ -180,7 +183,7 @@ test('defaults to regular mail when no delivery line is present', () => {
     'Dear Mr. Smith:',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET });
   assert.equal(result.mailClass, 'regular');
   assert.equal(result.deliveryDetected, false);
   assert.match(result.warnings[0], /No delivery method line/);
@@ -198,7 +201,7 @@ test('defaults to regular mail when the top line names only a non-mail method', 
     'Dear Mr. Smith:',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET });
   assert.equal(result.mailClass, 'regular');
   assert.equal(result.deliveryDetected, false);
   assert.deepEqual(result.otherMethods, ['hand']);
@@ -251,7 +254,7 @@ test('reads multiple CC recipients with per-recipient delivery methods', () => {
     'Enclosures',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET });
   assert.equal(result.mailClass, 'regular');
   assert.equal(result.cc.length, 2);
   assert.equal(result.cc[0].name, 'Jane Doe, Esq.');
@@ -276,7 +279,7 @@ test('a CC with no delivery method inherits the letter delivery method', () => {
     'Chicago, IL 60606',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET });
   assert.equal(result.cc[0].mailClass, 'certified');
   assert.equal(result.cc[0].mailClassDetected, false);
 });
@@ -295,7 +298,7 @@ test('a CC without an address is reported but not silently dropped', () => {
     'cc: Client',
   ]);
 
-  const result = parseLetter(text, { excludeZip: '60602' });
+  const result = parseLetter(text, { excludeLine1: LETTERHEAD_STREET });
   assert.equal(result.cc.length, 1);
   assert.equal(result.cc[0].name, 'Client');
   assert.equal(result.cc[0].confidence, 'none');
@@ -344,7 +347,7 @@ const REAL_SHAPE = [
   'brooney@example.com',
 ];
 
-const FIRM = { excludeZip: '60134', excludeCompany: 'Rooney Law' };
+const FIRM = { excludeLine1: '100 Example Street', excludeCompany: 'Rooney Law' };
 
 test('reads a real letter that has no blank lines between blocks', () => {
   const result = parseLetter(letter(REAL_SHAPE), FIRM);
@@ -444,4 +447,79 @@ test('reports a warning when no recipient can be found', () => {
   const result = parseLetter('Just some prose with no address at all.');
   assert.equal(result.recipient, null);
   assert.match(result.warnings.join(' '), /Could not find a recipient address/);
+});
+
+test('a recipient in the firm’s own ZIP is still found', () => {
+  // A solo firm mails to its own town constantly — local clients, opposing
+  // counsel, the county. Matching the firm's address on ZIP discarded every one
+  // of them as letterhead and left the recipient blank with no explanation.
+  const text = letter([
+    'ROONEY LAW',
+    '217 South Third Street',
+    'Geneva, Illinois 60134',
+    '',
+    'August 26, 2026',
+    '',
+    'VIA U.S. MAIL',
+    'Melissa L. Rooney',
+    '2745 Patton Avenue',
+    'Geneva, Illinois 60134',
+    '',
+    'Dear Melissa:',
+    '',
+    'The body of the letter.',
+  ]);
+
+  const result = parseLetter(text, {
+    excludeLine1: '217 South Third Street',
+    excludeCompany: 'Rooney Law',
+  });
+
+  assert.equal(result.mailClass, 'regular');
+  assert.equal(result.recipient.name, 'Melissa L. Rooney');
+  assert.equal(result.recipient.address_line1, '2745 Patton Avenue');
+  assert.equal(result.recipient.address_city, 'Geneva');
+  assert.equal(result.recipient.address_zip, '60134', 'same ZIP as the firm');
+});
+
+test('the letterhead is still skipped when it shares the page with no delivery line', () => {
+  // Removing the ZIP rule must not let the firm's own address through: with no
+  // delivery line to anchor below, the letterhead is inside the search window.
+  const text = letter([
+    'ROONEY LAW',
+    '217 South Third Street',
+    'Geneva, Illinois 60134',
+    '',
+    'August 26, 2026',
+    '',
+    'Melissa L. Rooney',
+    '2745 Patton Avenue',
+    'Geneva, Illinois 60134',
+    '',
+    'Dear Melissa:',
+  ]);
+
+  const result = parseLetter(text, {
+    excludeLine1: '217 South Third Street',
+    excludeCompany: 'Rooney Law',
+  });
+  assert.equal(result.recipient.address_line1, '2745 Patton Avenue');
+});
+
+test('the firm’s own street is matched despite punctuation and spacing', () => {
+  const text = letter([
+    'ROONEY LAW',
+    '217 S. Third St.',
+    'Geneva, Illinois 60134',
+    '',
+    'Ms. Dana Whitfield',
+    '900 N. Michigan Avenue',
+    'Chicago, IL 60611',
+    '',
+    'Dear Ms. Whitfield:',
+  ]);
+
+  const result = parseLetter(text, { excludeLine1: '217 S Third St' });
+  assert.equal(result.recipient.name, 'Ms. Dana Whitfield');
+  assert.equal(result.recipient.address_zip, '60611');
 });

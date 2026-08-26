@@ -153,17 +153,37 @@ By default events are held in memory only, so every deploy empties the **Recent
 mail** panel — the letters are unaffected and Lob still has the full history, but
 the firm's own trail starts over. Attach a volume to keep it:
 
-1. In Railway, open the service and go to **Settings → Volumes → New Volume**.
-2. Set the mount path to `/data` and attach it to this service.
-3. Add a variable `EVENT_LOG_PATH=/data/lob-events.jsonl` and redeploy.
+1. Open the project **canvas** (the view with the service card) and choose
+   **+ Add → Volume**. Volumes are managed on the canvas, where they appear as
+   their own node wired to the service — there is no "Volumes" section under the
+   service's Settings tab.
+2. Attach it to `mail-service` with mount path `/data`.
+3. Add the variable `EVENT_LOG_PATH=/data/lob-events.jsonl`.
+4. **Apply the staged changes.** A banner reading **"Apply N changes"** appears at
+   the top of the canvas with a **Deploy** button. Volume changes are staged, not
+   live, and *nothing mounts until that button is pressed* — redeploying the
+   service does not substitute for it. Press **Details** first and check the list
+   is only volume and mount-path entries.
 
 Each event is appended as one JSON line. At startup the service reads the tail of
 that file back, so the panel survives deploys and crashes. The file is only ever
 appended to; the directory is created if the volume is empty.
 
-The `server.started` log line reports what happened, e.g.
-`"eventsRestored": 42, "eventLog": "/data/lob-events.jsonl"` — a restart showing
-`eventsRestored: 0` when mail has been sent means the path or the mount is wrong.
+The `server.started` line is the authority on whether it worked:
+
+- `"eventLog": "/data/lob-events.jsonl"` — mounted, history is durable.
+- `"eventLog": "… (NOT on a volume — lost on restart)"` — the path exists but is
+  ordinary container storage. The variable is set and the volume is probably
+  staged but never applied; go back to step 4.
+
+Do not trust the Railway API's `volumeMounts` on its own. It reports a mount as
+configured while `hasVolume` is still false and nothing is bound in the
+container — the startup line reads the running filesystem and is the one that
+matters.
+
+Create the volume at its final size in one step. Resizing a volume that has never
+been mounted has been observed to leave it configured but permanently unbindable;
+the fix is to delete it and create a new one.
 
 Because it is never rotated, only the last few megabytes are read at boot, which
 is far more than `EVENT_MAX_RETAINED` needs. A half-written final line from a
