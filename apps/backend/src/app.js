@@ -86,6 +86,8 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   });
 
   const app = express();
+  // Exposed so the entry point can restore the event log before listening.
+  app.locals.eventStore = events;
   app.disable('x-powered-by');
   app.set('trust proxy', true);
   app.use(corsMiddleware(config.allowedOrigins));

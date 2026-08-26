@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createHmac } from 'node:crypto';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { verifyWebhook, expectedSignature, timestampToMillis, DEFAULT_TOLERANCE_MS } from '../src/webhook.js';
 import { EventStore, normalizeEvent, describeEventType } from '../src/event-store.js';
@@ -151,6 +154,85 @@ test('the store keeps the latest event per letter and bounds its memory', async 
   assert.equal(store.events.length, 3, 'oldest events are dropped');
   assert.equal(store.recent(2).length, 2);
   assert.equal(store.recent(1)[0].eventType, 'letter.delivered', 'newest first');
+});
+
+test('a restart reloads tracking history from the event log', async () => {
+  // Without this the "Recent mail" panel is empty after every deploy, even
+  // though the letters were mailed and the log on disk has them.
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  const logPath = join(dir, 'nested', 'lob-events.jsonl');
+
+  const first = new EventStore({ logPath });
+  // The directory does not exist yet, exactly as on a freshly mounted volume.
+  await first.restore();
+  await first.record({ reference_id: 'ltr_1', event_type: { id: 'letter.mailed' } });
+  await first.record({ reference_id: 'ltr_1', event_type: { id: 'letter.delivered' } });
+  await first.record({ reference_id: 'ltr_2', event_type: { id: 'letter.certified.delivered' } });
+
+  const afterRestart = new EventStore({ logPath });
+  const summary = await afterRestart.restore();
+
+  assert.equal(summary.restored, 3);
+  assert.equal(summary.skipped, 0);
+  assert.equal(afterRestart.latestFor('ltr_1').eventType, 'letter.delivered', 'newest wins per letter');
+  assert.equal(afterRestart.latestFor('ltr_2').label, 'Certified: delivered');
+  assert.equal(afterRestart.recent(1)[0].eventType, 'letter.certified.delivered', 'newest first');
+
+  // Recording after a restore keeps appending to the same log rather than
+  // truncating what was already there.
+  await afterRestart.record({ reference_id: 'ltr_3', event_type: { id: 'letter.delivered' } });
+  const lines = (await readFile(logPath, 'utf8')).trim().split('\n');
+  assert.equal(lines.length, 4);
+});
+
+test('restoring never keeps more than the ring buffer holds', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  const logPath = join(dir, 'events.jsonl');
+
+  const writer = new EventStore({ logPath, maxEvents: 100 });
+  for (let index = 0; index < 20; index += 1) {
+    await writer.record({ reference_id: `ltr_${index}`, event_type: { id: 'letter.delivered' } });
+  }
+
+  const store = new EventStore({ logPath, maxEvents: 5 });
+  const summary = await store.restore();
+  assert.equal(summary.restored, 5);
+  assert.equal(store.events.length, 5);
+  assert.equal(store.recent(1)[0].letterId, 'ltr_19', 'the most recent events are the ones kept');
+});
+
+test('a truncated or corrupt line does not lose the rest of the history', async () => {
+  // A crash mid-append leaves a half-written final line on disk.
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  const logPath = join(dir, 'events.jsonl');
+  const good = (id, type) => JSON.stringify(normalizeEvent({ reference_id: id, event_type: { id: type } }));
+
+  await writeFile(
+    logPath,
+    [good('ltr_1', 'letter.mailed'), '{"letterId":"ltr_2","eventTy', good('ltr_3', 'letter.delivered'), ''].join('\n'),
+  );
+
+  const problems = [];
+  const store = new EventStore({ logPath, onError: (message) => problems.push(message) });
+  const summary = await store.restore();
+
+  assert.equal(summary.restored, 2);
+  assert.equal(summary.skipped, 1);
+  assert.equal(store.latestFor('ltr_1').eventType, 'letter.mailed');
+  assert.equal(store.latestFor('ltr_3').eventType, 'letter.delivered');
+  assert.equal(problems.length, 1, 'the skipped line is reported');
+  assert.match(problems[0], /unreadable/);
+});
+
+test('restoring is a no-op without a log path and survives a missing file', async () => {
+  const inMemory = new EventStore({});
+  assert.deepEqual(await inMemory.restore(), { restored: 0, skipped: 0 });
+
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  const problems = [];
+  const missing = new EventStore({ logPath: join(dir, 'never-written.jsonl'), onError: (m) => problems.push(m) });
+  assert.deepEqual(await missing.restore(), { restored: 0, skipped: 0 });
+  assert.equal(problems.length, 0, 'a fresh volume is not an error');
 });
 
 test('a failing event log never breaks recording', async () => {

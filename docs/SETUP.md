@@ -147,9 +147,27 @@ timestamp and the exact request body. Deliveries that are unsigned, wrongly
 signed, or more than five minutes old are refused, so the endpoint is safe to
 expose without the add-in's token (Lob cannot send one).
 
-Events are held in memory and lost when Railway restarts the service. To keep a
-durable trail, attach a Railway volume and set `EVENT_LOG_PATH` to a file on it
-(e.g. `/data/lob-events.jsonl`); each event is appended as one JSON line.
+### Keeping tracking history across restarts
+
+By default events are held in memory only, so every deploy empties the **Recent
+mail** panel — the letters are unaffected and Lob still has the full history, but
+the firm's own trail starts over. Attach a volume to keep it:
+
+1. In Railway, open the service and go to **Settings → Volumes → New Volume**.
+2. Set the mount path to `/data` and attach it to this service.
+3. Add a variable `EVENT_LOG_PATH=/data/lob-events.jsonl` and redeploy.
+
+Each event is appended as one JSON line. At startup the service reads the tail of
+that file back, so the panel survives deploys and crashes. The file is only ever
+appended to; the directory is created if the volume is empty.
+
+The `server.started` log line reports what happened, e.g.
+`"eventsRestored": 42, "eventLog": "/data/lob-events.jsonl"` — a restart showing
+`eventsRestored: 0` when mail has been sent means the path or the mount is wrong.
+
+Because it is never rotated, only the last few megabytes are read at boot, which
+is far more than `EVENT_MAX_RETAINED` needs. A half-written final line from a
+crash is skipped rather than discarding the rest.
 
 The task pane's **Recent mail** section lists recent letters from Lob with the
 latest status for each.

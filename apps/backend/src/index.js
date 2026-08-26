@@ -10,6 +10,10 @@ for (const problem of problems) {
 
 const app = createApp({ config });
 
+// Reload tracking history before accepting traffic, so the "Recent mail" panel
+// is not blank after a deploy. Without EVENT_LOG_PATH this is a no-op.
+const restored = await app.locals.eventStore.restore();
+
 app.listen(config.port, () => {
   const mode = config.lob.apiKey.startsWith('live_') ? 'LIVE (real postage)' : 'test';
   process.stdout.write(
@@ -19,6 +23,8 @@ app.listen(config.port, () => {
       port: config.port,
       lobMode: mode,
       configProblems: problems.length,
+      eventsRestored: restored.restored,
+      eventLog: config.events.logPath || 'memory only (lost on restart)',
     })}\n`,
   );
 });
