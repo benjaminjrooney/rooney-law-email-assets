@@ -1,4 +1,4 @@
-import { appendFile, mkdir, open } from 'node:fs/promises';
+import { appendFile, mkdir, open, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 /**
@@ -75,17 +75,44 @@ export function normalizeEvent(raw) {
   };
 }
 
+/**
+ * Guess whether a path is on a mounted volume rather than the container's own
+ * disk.
+ *
+ * Setting EVENT_LOG_PATH without attaching a volume fails silently in the worst
+ * way: the directory is created inside the container, writes succeed, the
+ * startup log shows the configured path, and everything looks right — until a
+ * deploy throws the whole filesystem away. Comparing device IDs distinguishes
+ * the two, because a mount is by definition a different device.
+ *
+ * @returns {Promise<boolean|null>} null when it cannot be determined
+ */
+export async function looksDurable(path, referencePath) {
+  try {
+    const [target, reference] = await Promise.all([stat(path), stat(referencePath)]);
+    return target.dev !== reference.dev;
+  } catch {
+    // Not worth reporting: this is a diagnostic, and the caller has already
+    // handled anything that actually stops the log from working.
+    return null;
+  }
+}
+
 export class EventStore {
   /**
    * @param {object} [options]
    * @param {number} [options.maxEvents] ring-buffer size
    * @param {string} [options.logPath] append each event here as JSON lines
    * @param {(line: string) => void} [options.onError] reporter for log failures
+   * @param {string} [options.durabilityReference] path known to be on the
+   *   container's own disk, used to tell a mounted volume from an ordinary
+   *   directory
    */
-  constructor({ maxEvents = 500, logPath = '', onError } = {}) {
+  constructor({ maxEvents = 500, logPath = '', onError, durabilityReference } = {}) {
     this.maxEvents = maxEvents;
     this.logPath = logPath;
     this.onError = onError ?? (() => {});
+    this.durabilityReference = durabilityReference ?? process.cwd();
     /** @type {object[]} newest last */
     this.events = [];
     /** @type {Map<string, object>} letter id → most recent event */
@@ -103,14 +130,23 @@ export class EventStore {
    * A missing file, an unreadable volume, or a half-written final line are all
    * normal rather than fatal — the service must still come up and accept mail.
    *
-   * @returns {Promise<{restored: number, skipped: number}>}
+   * @returns {Promise<{restored: number, skipped: number, durable: boolean|null}>}
    */
   async restore() {
-    if (!this.logPath) return { restored: 0, skipped: 0 };
+    if (!this.logPath) return { restored: 0, skipped: 0, durable: null };
 
     // The volume is mounted empty on first deploy, so the directory holding the
     // log may not exist yet; without this the first append would fail too.
-    await mkdir(dirname(this.logPath), { recursive: true }).catch(() => {});
+    const directory = dirname(this.logPath);
+    await mkdir(directory, { recursive: true }).catch(() => {});
+
+    // Checked after mkdir so a volume mounted empty still reports correctly.
+    const durable = await looksDurable(directory, this.durabilityReference);
+    if (durable === false) {
+      this.onError(
+        `EVENT_LOG_PATH (${this.logPath}) is not on a mounted volume, so tracking history will still be lost on restart. Attach a Railway volume at ${directory}.`,
+      );
+    }
 
     let handle;
     try {
@@ -120,7 +156,7 @@ export class EventStore {
       if (error.code !== 'ENOENT') {
         this.onError(`Could not read EVENT_LOG_PATH: ${error.message}`);
       }
-      return { restored: 0, skipped: 0 };
+      return { restored: 0, skipped: 0, durable };
     }
 
     try {
@@ -163,10 +199,10 @@ export class EventStore {
       if (skipped > 0) {
         this.onError(`Skipped ${skipped} unreadable line(s) in EVENT_LOG_PATH.`);
       }
-      return { restored: this.events.length, skipped };
+      return { restored: this.events.length, skipped, durable };
     } catch (error) {
       this.onError(`Could not restore from EVENT_LOG_PATH: ${error.message}`);
-      return { restored: 0, skipped: 0 };
+      return { restored: 0, skipped: 0, durable };
     } finally {
       await handle.close().catch(() => {});
     }
