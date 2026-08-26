@@ -197,7 +197,7 @@ test('task pane reads the letter, pre-fills it and sends it', { skip: chromium ?
     assert.equal(lob.calls.length, 2);
     assert.equal(lob.calls[0].extraService, 'certified_return_receipt');
     assert.equal(lob.calls[1].extraService, null);
-    assert.match(lob.calls[0].file.filename, /^Smith demand letter mailed on \d{4}\.\d{1,2}\.\d{1,2}\.pdf$/);
+    assert.equal(lob.calls[0].file.filename, 'Smith demand letter (mailed).pdf');
     assert.deepEqual(errors, []);
   } finally {
     await pane.close();
