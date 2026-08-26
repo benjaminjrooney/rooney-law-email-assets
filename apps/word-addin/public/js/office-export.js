@@ -128,18 +128,44 @@ export async function readDocumentText() {
   }
 }
 
-/** Best-effort file name for the exported PDF, e.g. "Smith demand letter.pdf". */
-export function documentPdfName() {
-  let base = 'letter';
+/** The firm writes dates as 2026.8.26 — year, month, day, no leading zeros. */
+export function formatFilingDate(date = new Date()) {
+  return `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
+}
+
+/** Characters Windows and SharePoint refuse in a file name. */
+const ILLEGAL_FILENAME_CHARS = /[\\/:*?"<>|]/g;
+
+/**
+ * Name the exported PDF after the Word document it came from, plus the date it
+ * was mailed:
+ *
+ *   "2026.8.25 Letter to Isaiah.docx"
+ *     → "2026.8.25 Letter to Isaiah mailed on 2026.8.26.pdf"
+ *
+ * @param {string} documentName file name of the open document, with or without extension
+ * @param {Date} [date] the mailing date
+ */
+export function mailedPdfName(documentName, date = new Date()) {
+  const base =
+    String(documentName ?? '')
+      .replace(/\.(docx?|dotx?|rtf|odt|pdf)$/i, '')
+      .replace(ILLEGAL_FILENAME_CHARS, '-')
+      .trim()
+      .slice(0, 120) || 'Letter';
+  return `${base} mailed on ${formatFilingDate(date)}.pdf`;
+}
+
+/** File name for the exported PDF, taken from the open document. */
+export function documentPdfName(date = new Date()) {
+  let raw = '';
   try {
     const url = Office.context.document.url ?? '';
-    const raw = decodeURIComponent(url.split(/[?#]/)[0].split(/[\\/]/).pop() ?? '');
-    const withoutExtension = raw.replace(/\.(docx?|dotx?|rtf|odt)$/i, '').trim();
-    if (withoutExtension) base = withoutExtension;
+    raw = decodeURIComponent(url.split(/[?#]/)[0].split(/[\\/]/).pop() ?? '');
   } catch {
     /* url is unavailable for unsaved documents */
   }
-  return `${base.slice(0, 100)}.pdf`;
+  return mailedPdfName(raw, date);
 }
 
 /** True when the host is Word on the web, where PDF export is unavailable. */
