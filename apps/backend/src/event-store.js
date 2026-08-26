@@ -1,4 +1,5 @@
-import { appendFile } from 'node:fs/promises';
+import { appendFile, mkdir, open } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 /**
  * Tracking events received from Lob webhooks.
@@ -7,8 +8,9 @@ import { appendFile } from 'node:fs/promises';
  * this store exists so the task pane can show the latest status without a
  * per-letter API call, and so there is a local trail of what happened.
  *
- * Memory is bounded and lost on restart. Set EVENT_LOG_PATH (to a file on a
- * Railway volume) for a durable append-only copy.
+ * Memory is bounded. Set EVENT_LOG_PATH (to a file on a Railway volume) and the
+ * store both appends every event there and reads the tail of it back at startup,
+ * so a deploy or a crash does not empty the "Recent mail" panel.
  */
 
 /** Friendly labels for the Lob event types this add-in can produce. */
@@ -46,6 +48,13 @@ const NOTABLE = new Set([
   'letter.deleted',
 ]);
 
+/**
+ * How much of the log to read back at startup. Events are a few hundred bytes,
+ * so this comfortably covers any sane EVENT_MAX_RETAINED while keeping boot
+ * bounded on a log that has been appended to for years.
+ */
+const RESTORE_TAIL_BYTES = 4 * 1024 * 1024;
+
 export function describeEventType(eventType) {
   return EVENT_LABELS[eventType] ?? eventType ?? 'Unknown event';
 }
@@ -81,6 +90,86 @@ export class EventStore {
     this.events = [];
     /** @type {Map<string, object>} letter id → most recent event */
     this.latest = new Map();
+  }
+
+  /**
+   * Reload recent events from the log so a restart does not start blank.
+   *
+   * Only the tail of the file is read: the log is append-only and never
+   * rotated, so after a year of mail it is far larger than the ring buffer it
+   * feeds. Reading the last slice bounds both memory and boot time regardless
+   * of how big the file has grown.
+   *
+   * A missing file, an unreadable volume, or a half-written final line are all
+   * normal rather than fatal — the service must still come up and accept mail.
+   *
+   * @returns {Promise<{restored: number, skipped: number}>}
+   */
+  async restore() {
+    if (!this.logPath) return { restored: 0, skipped: 0 };
+
+    // The volume is mounted empty on first deploy, so the directory holding the
+    // log may not exist yet; without this the first append would fail too.
+    await mkdir(dirname(this.logPath), { recursive: true }).catch(() => {});
+
+    let handle;
+    try {
+      handle = await open(this.logPath, 'r');
+    } catch (error) {
+      // Nothing recorded yet is the expected state on a fresh volume.
+      if (error.code !== 'ENOENT') {
+        this.onError(`Could not read EVENT_LOG_PATH: ${error.message}`);
+      }
+      return { restored: 0, skipped: 0 };
+    }
+
+    try {
+      const { size } = await handle.stat();
+      const start = Math.max(0, size - RESTORE_TAIL_BYTES);
+      const buffer = Buffer.alloc(size - start);
+      if (buffer.length > 0) await handle.read(buffer, 0, buffer.length, start);
+
+      let text = buffer.toString('utf8');
+      if (start > 0) {
+        // Reading from a byte offset almost certainly lands mid-line; that
+        // fragment is not a record, so drop everything before the first break.
+        const newline = text.indexOf('\n');
+        text = newline === -1 ? '' : text.slice(newline + 1);
+      }
+
+      const lines = text.split('\n').filter((line) => line.trim() !== '');
+      let skipped = 0;
+      for (const line of lines.slice(-this.maxEvents)) {
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          // A crash mid-append leaves a truncated last line. One unreadable
+          // record is not a reason to discard the rest of the history.
+          skipped += 1;
+          continue;
+        }
+        if (!event || typeof event !== 'object' || !event.eventType) {
+          skipped += 1;
+          continue;
+        }
+        this.events.push(event);
+        if (event.letterId) this.latest.set(event.letterId, event);
+      }
+
+      if (this.events.length > this.maxEvents) {
+        this.events = this.events.slice(-this.maxEvents);
+      }
+      if (skipped > 0) {
+        this.onError(`Skipped ${skipped} unreadable line(s) in EVENT_LOG_PATH.`);
+      }
+      return { restored: this.events.length, skipped };
+    } catch (error) {
+      this.onError(`Could not restore from EVENT_LOG_PATH: ${error.message}`);
+      return { restored: 0, skipped: 0 };
+    } finally {
+      await handle.close().catch(() => {});
+    }
   }
 
   async record(rawEvent) {
