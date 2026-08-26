@@ -417,7 +417,7 @@ async function readDocument() {
 
   const ret = state.config?.returnAddress ?? {};
   state.parsed = parseLetter(text, {
-    excludeZip: ret.address_zip,
+    excludeLine1: ret.address_line1,
     excludeCompany: ret.company || ret.name,
   });
 
