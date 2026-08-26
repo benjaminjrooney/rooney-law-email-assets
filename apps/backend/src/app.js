@@ -127,7 +127,7 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
         // Verification returns real answers only on a live key.
         addressCheck: lob.isLive,
         verifyBeforeSend: config.verifyBeforeSend,
-        tracking: Boolean(config.lob.webhookSecret),
+        tracking: config.lob.webhookSecrets.length > 0,
         cancellationWindowMinutes: config.lob.cancellationWindowMinutes,
         costEstimate: config.rates.configured,
       },
@@ -410,7 +410,7 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
    */
   app.post('/webhooks/lob', async (req, res) => {
     const verdict = verifyWebhook({
-      secret: config.lob.webhookSecret,
+      secrets: config.lob.webhookSecrets,
       signature: req.get('lob-signature'),
       timestamp: req.get('lob-signature-timestamp'),
       rawBody: req.body,
@@ -451,7 +451,7 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
         description: letter?.description ?? null,
         lastEvent: events.latestFor(letter?.id),
       }));
-      res.json({ mailings, trackingConfigured: Boolean(config.lob.webhookSecret) });
+      res.json({ mailings, trackingConfigured: config.lob.webhookSecrets.length > 0 });
     } catch (error) {
       next(error);
     }
@@ -460,7 +460,7 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   /** Everything the webhook has told us, newest first. */
   app.get('/api/events', guard, (req, res) => {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit ?? '50', 10) || 50, 1), 200);
-    res.json({ events: events.recent(limit), trackingConfigured: Boolean(config.lob.webhookSecret) });
+    res.json({ events: events.recent(limit), trackingConfigured: config.lob.webhookSecrets.length > 0 });
   });
 
   // ----------------------------------------------------------- add-in files --

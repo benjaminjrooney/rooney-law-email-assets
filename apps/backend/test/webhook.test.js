@@ -79,6 +79,37 @@ test('a wrong secret, missing headers, and no configured secret each fail distin
   const unconfigured = verifyWebhook({ secret: '', signature: 'x', timestamp, rawBody: BODY, now });
   assert.equal(unconfigured.status, 503);
   assert.match(unconfigured.message, /LOB_WEBHOOK_SECRET/);
+
+  const emptyList = verifyWebhook({ secrets: [], signature: 'x', timestamp, rawBody: BODY, now });
+  assert.equal(emptyList.status, 503);
+});
+
+test('either the test or the live webhook secret is accepted', () => {
+  // Lob signs with the secret of whichever webhook delivered the event, so the
+  // service has to hold both while test and live run side by side.
+  const now = Date.now();
+  const timestamp = String(now);
+  const secrets = ['whsec_test_env', 'whsec_live_env'];
+
+  for (const signing of secrets) {
+    const verdict = verifyWebhook({
+      secrets,
+      signature: expectedSignature(signing, timestamp, BODY),
+      timestamp,
+      rawBody: BODY,
+      now,
+    });
+    assert.deepEqual(verdict, { ok: true }, `signed with ${signing}`);
+  }
+
+  const stranger = verifyWebhook({
+    secrets,
+    signature: expectedSignature('whsec_someone_else', timestamp, BODY),
+    timestamp,
+    rawBody: BODY,
+    now,
+  });
+  assert.equal(stranger.ok, false);
 });
 
 test('events are normalized from Lob’s shape', () => {
