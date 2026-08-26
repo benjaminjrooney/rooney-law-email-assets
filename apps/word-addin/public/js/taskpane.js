@@ -27,6 +27,8 @@ const state = {
   busy: false,
   /** Countdown timers for the cancellation windows shown on the results card. */
   timers: [],
+  /** The exact PDF that was mailed, kept so a copy can be saved. */
+  mailedPdf: null,
 };
 
 function clearTimers() {
@@ -684,6 +686,7 @@ async function handleSubmit(event) {
 
   try {
     const { blob, byteLength } = await exportDocumentPdf();
+    const filename = documentPdfName();
     progress.remove();
     const sending = showMessage(
       'info',
@@ -693,12 +696,14 @@ async function handleSubmit(event) {
 
     const response = await state.client.createLetters({
       pdf: blob,
-      filename: documentPdfName(),
+      filename,
       payload: buildPayload(),
     });
 
     sending.remove();
     state.idempotencyKey = null; // a fresh key for the next letter
+    // Keep the exact bytes that were mailed, so a copy can be saved.
+    state.mailedPdf = { blob, filename };
     renderResults(response);
   } catch (error) {
     progress.remove();
@@ -877,6 +882,50 @@ async function loadMailings() {
   }
 }
 
+/**
+ * Offer the mailed PDF as a download, named after the document it came from.
+ *
+ * A stopgap: it lands wherever the browser puts downloads, so the copy still
+ * has to be filed by hand. Saving straight into the matter folder needs
+ * Microsoft Graph, which is the next piece of work.
+ */
+function buildSaveCopyControls() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'cancel-controls';
+  if (!state.mailedPdf) return wrapper;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'ghost';
+  button.textContent = 'Save a copy of the mailed PDF';
+
+  const note = document.createElement('p');
+  note.className = 'hint';
+  note.textContent = state.mailedPdf.filename;
+
+  button.addEventListener('click', () => {
+    const url = URL.createObjectURL(state.mailedPdf.blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = state.mailedPdf.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      note.textContent = `Saved as ${state.mailedPdf.filename} — check your Downloads folder.`;
+    } catch (error) {
+      note.className = 'message message-error';
+      note.textContent = `Word blocked the download: ${error?.message ?? error}. Use "View the printed proof" above and save from there.`;
+    } finally {
+      // Give the download a moment to start before releasing the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    }
+  });
+
+  wrapper.append(button, note);
+  return wrapper;
+}
+
 function renderResults(response) {
   clearStatus();
   clearTimers();
@@ -936,6 +985,10 @@ function renderResults(response) {
     }
 
     body.append(item);
+  }
+
+  if (response.mailings?.some((mailing) => mailing.ok)) {
+    body.append(buildSaveCopyControls());
   }
 
   el('letter-form').hidden = true;
