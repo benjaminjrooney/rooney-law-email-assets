@@ -14,12 +14,45 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 /** Lob's recommended replay tolerance. */
 export const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
 
-export function expectedSignature(secret, timestamp, rawBody) {
-  const payload = Buffer.concat([
+function signedPayload(timestamp, rawBody) {
+  return Buffer.concat([
     Buffer.from(`${timestamp}.`, 'utf8'),
     Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody), 'utf8'),
   ]);
-  return createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+export function expectedSignature(secret, timestamp, rawBody) {
+  return createHmac('sha256', secret).update(signedPayload(timestamp, rawBody)).digest('hex');
+}
+
+/**
+ * The secret is displayed in Lob's dashboard as hex. Whether it is meant as the
+ * literal string or as the bytes it encodes is not documented, and getting it
+ * wrong fails identically to a forgery, so both are tried. Each remains a full
+ * HMAC-SHA256 check — this widens what counts as the key, not what counts as a
+ * valid signature.
+ */
+function keyVariants(secret) {
+  const keys = [Buffer.from(secret, 'utf8')];
+  if (secret.length % 2 === 0 && /^[0-9a-f]+$/i.test(secret)) {
+    keys.push(Buffer.from(secret, 'hex'));
+  }
+  return keys;
+}
+
+/**
+ * Lob's timestamp header is documented only as "a string". Seconds and
+ * milliseconds are both plausible, and reading seconds as milliseconds puts
+ * every delivery decades outside the replay window — rejecting all of them
+ * with the same message a forgery gets.
+ *
+ * @returns {number|null} milliseconds since the epoch
+ */
+export function timestampToMillis(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  // 1e11 ms is 1973; any epoch value below that is really seconds.
+  return value < 1e11 ? value * 1000 : value;
 }
 
 function signaturesMatch(a, b) {
@@ -43,16 +76,21 @@ export function verifyWebhook({ secret, secrets, signature, timestamp, rawBody, 
     return { ok: false, status: 401, message: 'Missing Lob-Signature or Lob-Signature-Timestamp header.' };
   }
 
-  // Lob sends milliseconds since the epoch as a string.
-  const sentAt = Number(timestamp);
-  if (!Number.isFinite(sentAt)) {
+  const sentAt = timestampToMillis(timestamp);
+  if (sentAt === null) {
     return { ok: false, status: 401, message: 'Lob-Signature-Timestamp is not a number.' };
   }
   if (Math.abs(now - sentAt) > toleranceMs) {
     return { ok: false, status: 401, message: 'Webhook timestamp is outside the accepted window.' };
   }
+
+  // The signature is always computed over the timestamp exactly as sent, never
+  // the normalized one.
+  const payload = signedPayload(timestamp, rawBody);
   const matched = candidates.some((candidate) =>
-    signaturesMatch(signature, expectedSignature(candidate, timestamp, rawBody)),
+    keyVariants(candidate).some((key) =>
+      signaturesMatch(signature, createHmac('sha256', key).update(payload).digest('hex')),
+    ),
   );
   if (!matched) {
     return { ok: false, status: 401, message: 'Webhook signature does not match.' };
