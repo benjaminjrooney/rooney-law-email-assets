@@ -8,34 +8,38 @@ filled in completely.
 ## The shape it expects
 
 ```
-ROONEY LAW                                     ← letterhead (ignored)
-123 North LaSalle Street, Suite 1200
-Chicago, Illinois 60602
-
 August 25, 2026                                ← date (ignored)
-
-VIA CERTIFIED MAIL, RETURN RECEIPT REQUESTED   ← delivery method, at the top
-
-Jane Doe, Esq.                                 ← recipient, right below it
-Doe & Associates LLC
-500 West Madison Street, Suite 1000
-Chicago, Illinois 60661
-
-Re: Smith v. Jones, Case No. 2026 L 001234     ← becomes the Lob reference
-
-Dear Ms. Doe:
-
+VIA CERTIFIED MAIL, RETURN RECEIPT REQUESTED   ← delivery method, near the top
+Dana Whitfield                                 ← recipient, right below it
+Whitfield Law Group, LLC
+900 N. Michigan Avenue, Suite 1400
+Chicago, Illinois 60611
+dana@whitfieldlaw.example                      ← email/phone lines are skipped
+Re:  4120 Sheridan Road                        ← becomes the Lob reference
+Dear Ms. Whitfield:                            ← everything below is body text
 ...
-
 Sincerely,
-
 Benjamin J. Rooney
-
+Attorney, Rooney Law, P.C.                     ← signature block, never the
+100 Example Street                               recipient
+Geneva, Illinois 60134
+Direct: 331.555.0100
 cc: Robert Roe (via regular mail)              ← CC block, near the bottom
     Roe Law Group
     1 North Wacker Drive
     Chicago, IL 60606
 ```
+
+**Blank lines are not required.** The firm's letters space their paragraphs
+with paragraph styling rather than empty paragraphs, so the parser never relies
+on a blank line to tell where a block starts or ends. The recipient block is
+found by anchoring on the salutation: the address above `Dear …` is the
+addressee, and anything below it — including the signature block, which carries
+the firm's own address — is out of range.
+
+The letterhead is typically in the Word header rather than the body, so it
+never reaches the parser at all. When a letter does carry it in the body, it is
+skipped by matching against the return address configured on the server.
 
 ## Delivery method line
 
@@ -70,16 +74,20 @@ Within the block:
 - The last line before the city line is the street address; a standalone
   `Suite 1000`, `Floor 4`, or `Unit B` line becomes the second address line.
 - `P.O. Box 4820` is recognized as a street line.
+- An email address or a phone line (`dana@…`, `Direct: 331.555.0100`) inside
+  the block is skipped rather than treated as part of the address.
 - Lines above the street are the name and the company. A line that reads like an
   organization (`LLC`, `Inc.`, `Law Offices`, `Insurance Company`, …) is treated
   as the company, and a personal name — including one with `Esq.`, `Jr.` — as the
   name.
 - `Attn:` or `c/o` marks the addressee line, whatever else is in the block.
 
-If the letter has no delivery method line, the recipient is found by looking for
-the address block followed by `Re:` or `Dear`. The firm's own letterhead is
-scored down using the return address configured on the server, so it is not
-picked up as the recipient.
+If the letter has no delivery method line, the search simply starts at the top
+of the document and still stops at the salutation.
+
+When no address can be found above the salutation, the pane reports that and
+leaves the fields empty. It will not fall back to the signature block — mailing
+a letter to the firm's own office is worse than asking for the address.
 
 ## CC block
 

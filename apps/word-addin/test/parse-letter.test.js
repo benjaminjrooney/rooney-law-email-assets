@@ -314,6 +314,132 @@ test('toLines collapses runs of whitespace', () => {
   assert.deepEqual(toLines('  a   b \r\n c\t\td '), ['a b', 'c d']);
 });
 
+// The shapes below are taken from real Rooney Law letters. Names, addresses
+// and matters are fictional — only the structure is real, because that is what
+// the parser has to cope with:
+//   - the date comes first, the delivery line second
+//   - no empty paragraphs anywhere: spacing is paragraph styling
+//   - the letterhead lives in the Word header, so it is absent from body text
+//   - an email address sits inside the recipient block
+//   - "Re:" is tabbed and starts with a dash
+//   - the signature block carries the firm's own address, below the salutation
+const REAL_SHAPE = [
+  'August 25, 2026',
+  'VIA CERTIFIED MAIL, RETURN RECEIPT REQUESTED',
+  'Dana Whitfield',
+  'Whitfield Law Group, LLC',
+  '900 N. Michigan Avenue, Suite 1400',
+  'Chicago, Illinois 60611',
+  'dana@whitfieldlaw.example',
+  'Re:\t - 4120 Sheridan Road, Evanston, Illinois',
+  'Dear Ms. Whitfield:',
+  'I represent Lakeshore Builders, LLC regarding the Real Estate Purchase Contract for the property located at 4120 Sheridan Road, Evanston, Illinois 60201. I am in receipt of your letter of August 24, 2026, addressed to my client.',
+  'My client provided your client with advance written notice of the closing, as required under the Contract. Your client failed to appear, while my client was ready and able to close.',
+  'Sincerely,',
+  'Benjamin J. Rooney',
+  'Attorney, Rooney Law, P.C.',
+  '100 Example Street',
+  'Geneva, Illinois 60134',
+  'Direct: 331.555.0100',
+  'brooney@example.com',
+];
+
+const FIRM = { excludeZip: '60134', excludeCompany: 'Rooney Law' };
+
+test('reads a real letter that has no blank lines between blocks', () => {
+  const result = parseLetter(letter(REAL_SHAPE), FIRM);
+
+  assert.equal(result.mailClass, 'certified_return_receipt');
+  assert.equal(result.recipient.name, 'Dana Whitfield');
+  assert.equal(result.recipient.company, 'Whitfield Law Group, LLC');
+  assert.equal(result.recipient.address_line1, '900 N. Michigan Avenue, Suite 1400');
+  assert.equal(result.recipient.address_city, 'Chicago');
+  assert.equal(result.recipient.address_state, 'IL');
+  assert.equal(result.recipient.address_zip, '60611');
+  assert.equal(result.recipient.confidence, 'high');
+  assert.deepEqual(result.warnings, []);
+});
+
+test('the signature block is never mistaken for the recipient', () => {
+  const result = parseLetter(letter(REAL_SHAPE), FIRM);
+  assert.equal(result.recipient.address_zip, '60611');
+  assert.notEqual(result.recipient.address_zip, '60134');
+  assert.ok(!/Rooney/.test(`${result.recipient.name} ${result.recipient.company}`));
+});
+
+test('a letter with no recipient block returns nothing rather than the firm address', () => {
+  // Only the signature block carries an address. Guessing here would mail the
+  // letter to the firm's own office.
+  const text = letter([
+    'August 25, 2026',
+    'VIA FIRST-CLASS MAIL',
+    'Dear Ms. Whitfield:',
+    'Enclosed please find the executed release.',
+    'Sincerely,',
+    'Benjamin J. Rooney',
+    'Attorney, Rooney Law, P.C.',
+    '100 Example Street',
+    'Geneva, Illinois 60134',
+  ]);
+
+  const result = parseLetter(text, FIRM);
+  assert.equal(result.recipient, null);
+  assert.match(result.warnings.join(' '), /Could not find a recipient address/);
+});
+
+test('an email line inside the recipient block does not break it', () => {
+  const result = parseLetter(letter(REAL_SHAPE), FIRM);
+  assert.equal(result.recipient.address_line1, '900 N. Michigan Avenue, Suite 1400');
+  assert.ok(!/@/.test(JSON.stringify(result.recipient)));
+});
+
+test('a tabbed "Re:" line with a leading dash is cleaned up', () => {
+  const result = parseLetter(letter(REAL_SHAPE), FIRM);
+  assert.equal(result.subject, '4120 Sheridan Road, Evanston, Illinois');
+});
+
+test('VIA EMAIL alone produces no mail class', () => {
+  const emailOnly = [...REAL_SHAPE];
+  emailOnly[1] = 'VIA EMAIL';
+  const result = parseLetter(letter(emailOnly), FIRM);
+
+  assert.equal(result.deliveryDetected, false);
+  assert.equal(result.mailClass, 'regular');
+  assert.deepEqual(result.otherMethods, ['email']);
+  assert.match(result.warnings[0], /does not name a mail class/);
+  // The recipient is still read, so a paper copy can be sent deliberately.
+  assert.equal(result.recipient.name, 'Dana Whitfield');
+});
+
+test('body prose naming a property address is not mistaken for the recipient', () => {
+  const result = parseLetter(letter(REAL_SHAPE), FIRM);
+  assert.notEqual(result.recipient.address_city, 'Evanston');
+});
+
+test('CC recipients separated only by paragraph spacing are split apart', () => {
+  const text = letter([
+    ...REAL_SHAPE,
+    'cc:\tRobert Roe (via regular mail)',
+    'Roe Law Group',
+    '1 North Wacker Drive',
+    'Chicago, IL 60606',
+    'Sam Poe, Esq.',
+    'Poe & Partners LLP',
+    '20 South Clark Street',
+    'Chicago, IL 60603',
+  ]);
+
+  const result = parseLetter(text, FIRM);
+  assert.equal(result.cc.length, 2);
+  assert.equal(result.cc[0].name, 'Robert Roe');
+  assert.equal(result.cc[0].address_zip, '60606');
+  assert.equal(result.cc[0].mailClass, 'regular');
+  assert.equal(result.cc[1].name, 'Sam Poe, Esq.');
+  assert.equal(result.cc[1].company, 'Poe & Partners LLP');
+  assert.equal(result.cc[1].address_zip, '60603');
+  assert.equal(result.cc[1].mailClass, 'certified_return_receipt', 'inherits the letter mail class');
+});
+
 test('reports a warning when no recipient can be found', () => {
   const result = parseLetter('Just some prose with no address at all.');
   assert.equal(result.recipient, null);

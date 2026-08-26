@@ -110,6 +110,13 @@ const SALUTATION = /^\s*(dear|to\s+whom\s+it\s+may\s+concern)\b/i;
 
 const CITY_STATE_ZIP = /^(.+?)[,\s]+([A-Za-z][A-Za-z.\s]*?)[,\s]+(\d{5})(?:-(\d{4}))?\.?$/;
 
+const EMAIL_LINE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+
+const LABELLED_PHONE =
+  /^(direct|tel|telephone|phone|fax|facsimile|mobile|cell|main|office)\b[\s.:]*[\d().+\-\s]{7,}$/i;
+
+const BARE_PHONE = /^[\d().+\-\s]{10,}$/;
+
 /** Split raw document text into trimmed lines. Word uses \r between paragraphs. */
 export function toLines(text) {
   return String(text ?? '')
@@ -300,66 +307,86 @@ function blockToAddress(block) {
   return parseAddressBlock(block) ?? parseInlineAddress(block.join(', '));
 }
 
-/** Group consecutive non-empty lines into blocks. */
-function collectBlocks(lines, startIndex, endIndex) {
-  const blocks = [];
-  let current = [];
-  for (let i = startIndex; i < endIndex; i += 1) {
-    const line = lines[i];
-    if (line === '') {
-      if (current.length > 0) {
-        blocks.push({ lines: current, start: i - current.length });
-        current = [];
-      }
-      continue;
-    }
-    current.push(line);
-  }
-  if (current.length > 0) blocks.push({ lines: current, start: endIndex - current.length });
-  return blocks;
+/** A line that belongs to a letterhead or signature block, not to an address. */
+function isContactLine(line) {
+  return EMAIL_LINE.test(line) || LABELLED_PHONE.test(line) || BARE_PHONE.test(line);
 }
 
-function findRecipient(lines, deliveryIndex, options) {
-  const searchEnd = Math.min(lines.length, Math.max(deliveryIndex + 25, 60));
-  const start = deliveryIndex >= 0 ? deliveryIndex + 1 : 0;
-  const blocks = collectBlocks(lines, start, searchEnd);
+/** Walking up from a city line, these mark the top of the address block. */
+function endsAddressBlock(line) {
+  return (
+    line === '' ||
+    DATE_LINE.test(line) ||
+    SUBJECT_LINE.test(line) ||
+    SALUTATION.test(line) ||
+    CC_LINE.test(line) ||
+    isDeliveryHeader(line)
+  );
+}
 
-  let best = null;
-  for (const block of blocks) {
-    const usable = block.lines.filter((line) => !DATE_LINE.test(line) && !SUBJECT_LINE.test(line) && !SALUTATION.test(line) && !isDeliveryHeader(line));
-    if (usable.length === 0) continue;
-    const address = blockToAddress(usable);
-    if (!address) continue;
-
-    let score = address.confidence === 'high' ? 2 : 0;
-
-    // The recipient block is the one immediately followed by "Re:" or "Dear".
-    const after = lines.slice(block.start + block.lines.length, block.start + block.lines.length + 6);
-    if (after.some((line) => SUBJECT_LINE.test(line) || SALUTATION.test(line))) score += 3;
-
-    // Right under the delivery header is exactly where the firm puts it.
-    if (deliveryIndex >= 0 && block.start <= deliveryIndex + 4) score += 3;
-
-    // Earlier blocks win ties; letterhead is filtered by the exclusions below.
-    score += Math.max(0, 3 - blocks.indexOf(block));
-
-    // Never pre-fill the firm's own address out of the letterhead.
-    if (options.excludeZip && address.address_zip.startsWith(String(options.excludeZip).slice(0, 5))) {
-      score -= 6;
-    }
-    if (
-      options.excludeCompany &&
-      [address.company, address.name].some(
-        (value) => value && value.toLowerCase().includes(String(options.excludeCompany).toLowerCase()),
-      )
-    ) {
-      score -= 6;
-    }
-
-    if (!best || score > best.score) best = { address, score, block };
+/**
+ * Collect the address lines sitting directly above a `City, ST ZIP` line.
+ *
+ * Real letters set their spacing with paragraph styles, not empty paragraphs,
+ * so a blank line cannot be relied on to mark where the block begins — the
+ * city line is the anchor and everything address-shaped above it belongs to it.
+ */
+function addressLinesAbove(lines, cityIndex, floor) {
+  const collected = [];
+  for (let index = cityIndex - 1; index >= floor && collected.length < 6; index -= 1) {
+    const line = lines[index];
+    if (endsAddressBlock(line)) break;
+    // An email or phone line sits inside plenty of address blocks; skip it
+    // rather than letting it end the block.
+    if (isContactLine(line)) continue;
+    // Address lines are short. A long line is body prose, so the block is done.
+    if (line.length > 90) break;
+    collected.unshift(line);
   }
+  return collected;
+}
 
-  return best && best.score > 0 ? best.address : null;
+/** The firm's own address, from the letterhead or the signature block. */
+function isOwnAddress(address, options) {
+  const zip = String(options.excludeZip ?? '').slice(0, 5);
+  if (zip && address.address_zip.startsWith(zip)) return true;
+
+  const company = String(options.excludeCompany ?? '').trim().toLowerCase();
+  if (
+    company &&
+    [address.company, address.name].some((value) => value && value.toLowerCase().includes(company))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Find the recipient by anchoring on the salutation.
+ *
+ * In every standard business letter the recipient block sits above "Dear …",
+ * and the signature block sits below it. Anchoring there keeps the firm's own
+ * address out of range even when the two are only paragraphs apart.
+ */
+function findRecipient(lines, deliveryIndex, options) {
+  const start = deliveryIndex >= 0 ? deliveryIndex + 1 : 0;
+
+  let boundary = lines.findIndex((line, index) => index >= start && SALUTATION.test(line));
+  if (boundary < 0) {
+    // No salutation: fall back to the subject line, then to a fixed window.
+    boundary = lines.findIndex((line, index) => index >= start && SUBJECT_LINE.test(line));
+  }
+  if (boundary < 0) boundary = Math.min(lines.length, start + 30);
+
+  for (let index = start; index < boundary; index += 1) {
+    if (!parseCityStateZip(lines[index])) continue;
+    const address = parseAddressBlock([...addressLinesAbove(lines, index, start), lines[index]]);
+    if (!address) continue;
+    // Skip the letterhead and keep looking for the addressee below it.
+    if (isOwnAddress(address, options)) continue;
+    return address;
+  }
+  return null;
 }
 
 function findCcSection(lines) {
@@ -373,16 +400,25 @@ function findCcSection(lines) {
 function splitCcEntries(section) {
   const entries = [];
   let current = [];
+
+  const flush = () => {
+    if (current.length > 0) entries.push(current);
+    current = [];
+  };
+
   for (const line of section) {
     if (line === '') {
-      if (current.length > 0) entries.push(current);
-      current = [];
+      flush();
       continue;
     }
     if (END_OF_CC.test(line)) break;
     current.push(line);
+    // An address ends at its `City, ST ZIP` line, so anything after it starts
+    // the next CC — letters separate them by paragraph spacing, not blank lines.
+    if (parseCityStateZip(line)) flush();
   }
-  if (current.length > 0) entries.push(current);
+
+  flush();
   return entries;
 }
 
@@ -464,7 +500,9 @@ export function parseLetter(documentText, options = {}) {
   for (const line of lines.slice(0, Math.min(lines.length, 60))) {
     const match = line.match(SUBJECT_LINE);
     if (match) {
-      subject = match[2].trim();
+      // "Re:<tab> - Smith v. Jones" — drop the leading dashes and separators
+      // a tabbed template leaves behind.
+      subject = match[2].replace(/^[\s\-–—:]+/, '').trim();
       break;
     }
   }
