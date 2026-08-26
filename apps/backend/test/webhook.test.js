@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { verifyWebhook, expectedSignature, DEFAULT_TOLERANCE_MS } from '../src/webhook.js';
+import { createHmac } from 'node:crypto';
+
+import { verifyWebhook, expectedSignature, timestampToMillis, DEFAULT_TOLERANCE_MS } from '../src/webhook.js';
 import { EventStore, normalizeEvent, describeEventType } from '../src/event-store.js';
 
 const SECRET = 'whsec_example_secret';
@@ -158,4 +160,61 @@ test('a failing event log never breaks recording', async () => {
   assert.equal(event.letterId, 'ltr_1');
   assert.equal(store.latestFor('ltr_1').eventType, 'letter.delivered');
   assert.equal(problems.length, 1);
+});
+
+test('a timestamp in seconds is accepted, not read as ancient milliseconds', () => {
+  // Lob documents the header only as "a string". Reading seconds as
+  // milliseconds puts every delivery decades outside the replay window and
+  // rejects it exactly like a forgery.
+  const now = Date.now();
+  const seconds = String(Math.floor(now / 1000));
+
+  const verdict = verifyWebhook({
+    secret: SECRET,
+    signature: expectedSignature(SECRET, seconds, BODY),
+    timestamp: seconds,
+    rawBody: BODY,
+    now,
+  });
+  assert.deepEqual(verdict, { ok: true });
+
+  assert.equal(timestampToMillis('1787840000'), 1787840000000, 'seconds are scaled up');
+  assert.equal(timestampToMillis('1787840000000'), 1787840000000, 'milliseconds pass through');
+  assert.equal(timestampToMillis('not-a-number'), null);
+  assert.equal(timestampToMillis('0'), null);
+});
+
+test('a stale delivery is still refused when the timestamp is in seconds', () => {
+  const now = Date.now();
+  const seconds = String(Math.floor((now - DEFAULT_TOLERANCE_MS - 60_000) / 1000));
+  const verdict = verifyWebhook({
+    secret: SECRET,
+    signature: expectedSignature(SECRET, seconds, BODY),
+    timestamp: seconds,
+    rawBody: BODY,
+    now,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.message, /outside the accepted window/);
+});
+
+test('a hex secret is accepted whether Lob signs with the text or the bytes', () => {
+  // Lob shows the secret as hex; which of the two it means is undocumented,
+  // and guessing wrong fails identically to a forgery.
+  const hexSecret = '8ec6f143144de0760d901e868a0b4e7bddaa743a';
+  const now = Date.now();
+  const timestamp = String(now);
+  const payload = Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), BODY]);
+
+  const asText = createHmac('sha256', Buffer.from(hexSecret, 'utf8')).update(payload).digest('hex');
+  const asBytes = createHmac('sha256', Buffer.from(hexSecret, 'hex')).update(payload).digest('hex');
+  assert.notEqual(asText, asBytes, 'the two readings really do differ');
+
+  for (const signature of [asText, asBytes]) {
+    const verdict = verifyWebhook({ secret: hexSecret, signature, timestamp, rawBody: BODY, now });
+    assert.deepEqual(verdict, { ok: true });
+  }
+
+  const forged = createHmac('sha256', Buffer.from('deadbeef', 'utf8')).update(payload).digest('hex');
+  assert.equal(verifyWebhook({ secret: hexSecret, signature: forged, timestamp, rawBody: BODY, now }).ok, false);
 });
