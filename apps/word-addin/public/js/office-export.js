@@ -128,36 +128,34 @@ export async function readDocumentText() {
   }
 }
 
-/** The firm writes dates as 2026.8.26 — year, month, day, no leading zeros. */
-export function formatFilingDate(date = new Date()) {
-  return `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
-}
-
 /** Characters Windows and SharePoint refuse in a file name. */
 const ILLEGAL_FILENAME_CHARS = /[\\/:*?"<>|]/g;
 
 /**
- * Name the exported PDF after the Word document it came from, plus the date it
- * was mailed:
+ * Name the exported PDF after the Word document it came from, marked as
+ * mailed:
  *
  *   "2026.8.25 Letter to Isaiah.docx"
- *     → "2026.8.25 Letter to Isaiah mailed on 2026.8.26.pdf"
+ *     -> "2026.8.25 Letter to Isaiah (mailed).pdf"
+ *
+ * No date is added — the firm already dates the document name itself.
  *
  * @param {string} documentName file name of the open document, with or without extension
- * @param {Date} [date] the mailing date
  */
-export function mailedPdfName(documentName, date = new Date()) {
+export function mailedPdfName(documentName) {
   const base =
     String(documentName ?? '')
       .replace(/\.(docx?|dotx?|rtf|odt|pdf)$/i, '')
+      // Naming an already-saved copy again must not give "(mailed) (mailed)".
+      .replace(/\s*\(mailed\)\s*$/i, '')
       .replace(ILLEGAL_FILENAME_CHARS, '-')
       .trim()
       .slice(0, 120) || 'Letter';
-  return `${base} mailed on ${formatFilingDate(date)}.pdf`;
+  return `${base} (mailed).pdf`;
 }
 
 /** File name for the exported PDF, taken from the open document. */
-export function documentPdfName(date = new Date()) {
+export function documentPdfName() {
   let raw = '';
   try {
     const url = Office.context.document.url ?? '';
@@ -165,7 +163,7 @@ export function documentPdfName(date = new Date()) {
   } catch {
     /* url is unavailable for unsaved documents */
   }
-  return mailedPdfName(raw, date);
+  return mailedPdfName(raw);
 }
 
 /** True when the host is Word on the web, where PDF export is unavailable. */

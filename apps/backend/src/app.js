@@ -255,7 +255,10 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
       }
 
       const baseKey = value.idempotencyKey || randomUUID();
-      const filename = (req.file.originalname || 'letter.pdf').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+      // Keep the name the add-in chose, minus anything that could confuse a
+      // multipart header or a file path. Parentheses are allowed so the name
+      // Lob records matches the document — "Smith demand (mailed).pdf".
+      const filename = (req.file.originalname || 'letter.pdf').replace(/[^\w.\-() ]+/g, '_').slice(0, 120);
       const results = [];
       let failures = 0;
 
