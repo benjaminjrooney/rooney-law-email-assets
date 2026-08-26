@@ -1,0 +1,385 @@
+/* Task pane styling: narrow column, Office-native type, no framework. */
+
+:root {
+  --ink: #1b1b1f;
+  --ink-soft: #5b5b66;
+  --line: #e1e1e6;
+  --accent: #7a1f2b; /* firm burgundy */
+  --accent-ink: #ffffff;
+  --surface: #ffffff;
+  --surface-alt: #faf9f8;
+  --ok: #0f6b3f;
+  --ok-bg: #eef8f2;
+  --warn: #8a5300;
+  --warn-bg: #fff8e8;
+  --error: #a4262c;
+  --error-bg: #fdf3f4;
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 12px;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--surface-alt);
+}
+
+h1 {
+  font-size: 17px;
+  margin: 0;
+}
+
+h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+  letter-spacing: 0.01em;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.badge {
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-test {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.badge-live {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.card-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+details.card > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style-position: inside;
+}
+
+.details-body {
+  padding-top: 10px;
+}
+
+label {
+  display: block;
+  margin: 10px 0 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+label:first-of-type {
+  margin-top: 0;
+}
+
+.optional {
+  font-weight: 400;
+  text-transform: none;
+}
+
+/* Every text-like input, however it was created: an input with no type
+   attribute is still a text box, and it must not size itself to 20 characters
+   and overflow its column. */
+input:not([type="checkbox"]):not([type="radio"]),
+select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #c8c6c4;
+  border-radius: 4px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--error);
+  background: var(--error-bg);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.checkbox input {
+  margin: 0;
+  width: auto;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.narrow {
+  flex: 0 0 74px;
+  min-width: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent);
+  padding: 8px 16px;
+  font-weight: 600;
+  width: 100%;
+}
+
+button.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button.ghost {
+  background: var(--surface);
+  border: 1px solid #c8c6c4;
+  padding: 6px 12px;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  text-decoration: underline;
+  font-size: 12px;
+}
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 4px;
+  background: linear-gradient(to bottom, rgba(250, 249, 248, 0), var(--surface-alt) 35%);
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.status {
+  margin-bottom: 10px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.message {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.message-info {
+  background: #eef4fb;
+  color: #10395e;
+}
+
+.message-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.message-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.message-error {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.message ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.summary {
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 0 2px 4px;
+}
+
+.summary strong {
+  color: var(--ink);
+}
+
+.return-address {
+  margin: 0 0 6px;
+  white-space: pre-line;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.cc-entry {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--surface-alt);
+}
+
+.cc-entry[data-enabled="false"] .cc-fields {
+  display: none;
+}
+
+.cc-entry header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cc-entry header label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.field-actions {
+  margin-top: 10px;
+}
+
+.verify-result:not(:empty) {
+  margin-top: 8px;
+}
+
+.verify-result .message {
+  margin-bottom: 0;
+}
+
+.suggestion {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.suggestion .return-address {
+  margin-top: 0;
+}
+
+.cancel-controls {
+  margin-top: 10px;
+}
+
+.cancel-controls .hint,
+.cancel-controls .message {
+  margin: 6px 0 0;
+}
+
+.result-item {
+  border-left: 3px solid var(--ok);
+  padding: 6px 0 6px 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.result-item.failed {
+  border-left-color: var(--error);
+}
+
+.result-item dl {
+  margin: 4px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  font-size: 12px;
+}
+
+.result-item dt {
+  color: var(--ink-soft);
+}
+
+.result-item dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: -1px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 3s;
+  }
+}

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mail this letter</title>
+    <link rel="stylesheet" href="./css/taskpane.css" />
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <main id="app" hidden>
+      <header class="app-header">
+        <h1>Mail this letter</h1>
+        <p id="mode-badge" class="badge badge-test">test mode</p>
+      </header>
+
+      <section id="status" class="status" role="status" aria-live="polite"></section>
+
+      <!-- ------------------------------------------------------- settings -->
+      <section id="settings-panel" class="card" hidden>
+        <h2>Connect to the mail service</h2>
+        <p class="hint">One-time setup. These are stored on this computer only.</p>
+        <label for="setting-base-url">Service address</label>
+        <input id="setting-base-url" type="url" placeholder="https://your-app.up.railway.app" autocomplete="off" />
+        <label for="setting-token">Access token</label>
+        <input id="setting-token" type="password" placeholder="Paste the API token" autocomplete="off" />
+        <div class="row">
+          <button id="save-settings" type="button" class="primary">Save and connect</button>
+          <button id="cancel-settings" type="button" class="ghost" hidden>Cancel</button>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- form -->
+      <form id="letter-form" hidden>
+        <section class="card">
+          <div class="card-heading">
+            <h2>Delivery</h2>
+            <button id="reread" type="button" class="link">Re-read document</button>
+          </div>
+          <label for="mail-class">How should this go out?</label>
+          <select id="mail-class"></select>
+          <p id="delivery-source" class="hint"></p>
+        </section>
+
+        <section class="card">
+          <h2>Recipient</h2>
+          <label for="to-name">Name</label>
+          <input id="to-name" type="text" name="to-name" maxlength="40" autocomplete="off" />
+          <label for="to-company">Company</label>
+          <input id="to-company" type="text" name="to-company" maxlength="40" autocomplete="off" />
+          <label for="to-line1">Street address</label>
+          <input id="to-line1" type="text" name="to-line1" autocomplete="off" />
+          <label for="to-line2">Suite / floor <span class="optional">(optional)</span></label>
+          <input id="to-line2" type="text" name="to-line2" autocomplete="off" />
+          <div class="row">
+            <div class="grow">
+              <label for="to-city">City</label>
+              <input id="to-city" type="text" name="to-city" autocomplete="off" />
+            </div>
+            <div class="narrow">
+              <label for="to-state">State</label>
+              <input id="to-state" type="text" name="to-state" maxlength="2" autocomplete="off" />
+            </div>
+            <div class="narrow">
+              <label for="to-zip">ZIP</label>
+              <input id="to-zip" type="text" name="to-zip" maxlength="10" autocomplete="off" />
+            </div>
+          </div>
+          <div class="field-actions">
+            <button id="check-to" type="button" class="link">Check this address with USPS</button>
+          </div>
+          <div id="to-verify" class="verify-result"></div>
+        </section>
+
+        <section id="cc-section" class="card" hidden>
+          <h2>Copies</h2>
+          <p class="hint">Each checked copy is mailed as its own letter, with the same PDF.</p>
+          <div id="cc-list"></div>
+        </section>
+
+        <details class="card">
+          <summary>Return address and print options</summary>
+          <div class="details-body">
+            <p id="return-address" class="return-address"></p>
+            <label class="checkbox">
+              <input id="opt-color" type="checkbox" />
+              Print in color
+            </label>
+            <label class="checkbox">
+              <input id="opt-double-sided" type="checkbox" />
+              Print double-sided
+            </label>
+            <label for="opt-placement">Address block on the envelope window</label>
+            <select id="opt-placement">
+              <option value="insert_blank_page">Add a separate address page (safest)</option>
+              <option value="top_first_page">Print over the top of page 1</option>
+            </select>
+            <p class="hint">
+              Letters already carry a typed address, so a separate address page avoids printing
+              Lob's address block on top of the letterhead. Certified mail always uses its own
+              cover sheet.
+            </p>
+            <label for="opt-description">Reference <span class="optional">(shows in the Lob dashboard)</span></label>
+            <input id="opt-description" type="text" maxlength="200" autocomplete="off" />
+            <button id="open-settings" type="button" class="link">Change service settings</button>
+          </div>
+        </details>
+
+        <section id="summary" class="summary"></section>
+
+        <div class="actions">
+          <button id="send" type="submit" class="primary">Send letter</button>
+        </div>
+      </form>
+
+      <!-- -------------------------------------------------------- results -->
+      <section id="results" class="card" hidden>
+        <h2>Sent</h2>
+        <div id="results-body"></div>
+        <button id="start-over" type="button" class="ghost">Mail another letter</button>
+      </section>
+
+      <!-- ---------------------------------------------------- recent mail -->
+      <details id="recent-mail" class="card">
+        <summary>Recent mail</summary>
+        <div class="details-body">
+          <div id="recent-body"></div>
+          <button id="refresh-recent" type="button" class="link">Refresh</button>
+        </div>
+      </details>
+    </main>
+
+    <noscript>This add-in needs JavaScript.</noscript>
+    <script type="module" src="./js/taskpane.js"></script>
+  </body>
+</html>
