@@ -32,8 +32,11 @@ function signaturesMatch(a, b) {
 /**
  * @returns {{ok: true} | {ok: false, status: number, message: string}}
  */
-export function verifyWebhook({ secret, signature, timestamp, rawBody, now = Date.now(), toleranceMs = DEFAULT_TOLERANCE_MS }) {
-  if (!secret) {
+export function verifyWebhook({ secret, secrets, signature, timestamp, rawBody, now = Date.now(), toleranceMs = DEFAULT_TOLERANCE_MS }) {
+  // Lob signs with the secret of whichever webhook delivered the event, so a
+  // service receiving both test and live events holds more than one.
+  const candidates = (secrets ?? (secret ? [secret] : [])).filter(Boolean);
+  if (candidates.length === 0) {
     return { ok: false, status: 503, message: 'LOB_WEBHOOK_SECRET is not configured on the server.' };
   }
   if (!signature || !timestamp) {
@@ -48,7 +51,10 @@ export function verifyWebhook({ secret, signature, timestamp, rawBody, now = Dat
   if (Math.abs(now - sentAt) > toleranceMs) {
     return { ok: false, status: 401, message: 'Webhook timestamp is outside the accepted window.' };
   }
-  if (!signaturesMatch(signature, expectedSignature(secret, timestamp, rawBody))) {
+  const matched = candidates.some((candidate) =>
+    signaturesMatch(signature, expectedSignature(candidate, timestamp, rawBody)),
+  );
+  if (!matched) {
     return { ok: false, status: 401, message: 'Webhook signature does not match.' };
   }
   return { ok: true };

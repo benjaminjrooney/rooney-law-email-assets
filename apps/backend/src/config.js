@@ -73,7 +73,13 @@ export function loadConfig(env = process.env) {
       timeoutMs: int('LOB_TIMEOUT_MS', 60_000, env),
       // Shown on the webhook's page in the Lob dashboard. Without it the
       // webhook endpoint refuses every delivery.
-      webhookSecret: str('LOB_WEBHOOK_SECRET', '', env),
+      // Lob keeps webhooks separate per environment, each with its own signing
+      // secret, so accept a comma-separated list and try each. That way the
+      // test and live webhooks can both deliver to the same service.
+      webhookSecrets: str('LOB_WEBHOOK_SECRET', '', env)
+        .split(',')
+        .map((secret) => secret.trim())
+        .filter(Boolean),
       // Fallback only: the real window comes from each letter's send_date.
       cancellationWindowMinutes: int('LOB_CANCELLATION_WINDOW_MINUTES', 5, env),
     },
