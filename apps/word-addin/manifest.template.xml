@@ -41,8 +41,14 @@
     <SourceLocation DefaultValue="{{BASE_URL}}/addin/taskpane.html"/>
   </DefaultSettings>
 
-  <!-- The add-in only reads the document; it never edits it. -->
-  <Permissions>ReadDocument</Permissions>
+  <!--
+    The add-in only reads the document; it never edits it. ReadAllDocument is
+    the least-privilege level that still allows it: exporting the whole document
+    as a PDF (getFileAsync) reads the entire file, which ReadDocument — scoped to
+    the selection and bindings — does not permit. With ReadDocument, Word refuses
+    the export with "You don't have sufficient permissions for this action".
+  -->
+  <Permissions>ReadAllDocument</Permissions>
 
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>

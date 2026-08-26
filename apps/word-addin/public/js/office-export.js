@@ -24,6 +24,25 @@ export function officeReady() {
   });
 }
 
+/**
+ * Explain an export failure in terms of what the user can actually do.
+ *
+ * The hint has to match the host: telling someone sitting in the Word desktop
+ * app that "Word on the web cannot export PDFs" sends them looking in the wrong
+ * place. A permissions refusal is a manifest problem, not something the user
+ * did wrong.
+ */
+function exportHint(error) {
+  const message = String(error?.message ?? '');
+  if (/permission/i.test(message)) {
+    return 'The installed add-in is not permitted to read the whole document. It needs to be reinstalled from an updated manifest — send this message to whoever set it up.';
+  }
+  if (isWordOnTheWeb()) {
+    return 'Word on the web cannot export PDFs from an add-in. Open the document in the Word desktop app and try again.';
+  }
+  return 'Save the document, then try again. If it keeps failing, close and reopen Word.';
+}
+
 function getFile(fileType, sliceSize) {
   return new Promise((resolve, reject) => {
     Office.context.document.getFileAsync(fileType, { sliceSize }, (result) => {
@@ -35,10 +54,7 @@ function getFile(fileType, sliceSize) {
       reject(
         new ExportError(error.message || 'Word could not export the document.', {
           code: error.code ?? null,
-          hint:
-            fileType === Office.FileType.Pdf
-              ? 'Word on the web cannot export PDFs from an add-in. Open the document in the Word desktop app and try again.'
-              : null,
+          hint: exportHint(error),
         }),
       );
     });
