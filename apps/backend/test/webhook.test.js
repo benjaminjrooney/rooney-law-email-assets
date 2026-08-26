@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { verifyWebhook, expectedSignature, timestampToMillis, DEFAULT_TOLERANCE_MS } from '../src/webhook.js';
-import { EventStore, normalizeEvent, describeEventType } from '../src/event-store.js';
+import { EventStore, normalizeEvent, describeEventType, looksDurable } from '../src/event-store.js';
 
 const SECRET = 'whsec_example_secret';
 const BODY = Buffer.from(JSON.stringify({ id: 'evt_1', event_type: { id: 'letter.delivered' } }));
@@ -213,7 +213,12 @@ test('a truncated or corrupt line does not lose the rest of the history', async 
   );
 
   const problems = [];
-  const store = new EventStore({ logPath, onError: (message) => problems.push(message) });
+  const store = new EventStore({
+    logPath,
+    // Keep the durability diagnostic out of the way; it is exercised on its own.
+    durabilityReference: join(dir, 'does-not-exist'),
+    onError: (message) => problems.push(message),
+  });
   const summary = await store.restore();
 
   assert.equal(summary.restored, 2);
@@ -226,13 +231,61 @@ test('a truncated or corrupt line does not lose the rest of the history', async 
 
 test('restoring is a no-op without a log path and survives a missing file', async () => {
   const inMemory = new EventStore({});
-  assert.deepEqual(await inMemory.restore(), { restored: 0, skipped: 0 });
+  assert.deepEqual(await inMemory.restore(), { restored: 0, skipped: 0, durable: null });
 
   const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
   const problems = [];
-  const missing = new EventStore({ logPath: join(dir, 'never-written.jsonl'), onError: (m) => problems.push(m) });
-  assert.deepEqual(await missing.restore(), { restored: 0, skipped: 0 });
+  const missing = new EventStore({
+    logPath: join(dir, 'never-written.jsonl'),
+    durabilityReference: join(dir, 'does-not-exist'),
+    onError: (m) => problems.push(m),
+  });
+  assert.deepEqual(await missing.restore(), { restored: 0, skipped: 0, durable: null });
   assert.equal(problems.length, 0, 'a fresh volume is not an error');
+});
+
+test('a log path with no volume behind it is called out, not silently accepted', async () => {
+  // Setting EVENT_LOG_PATH without attaching a volume is the dangerous case:
+  // the directory is created inside the container, writes succeed, and the
+  // startup line shows the configured path — right up until a deploy discards
+  // the filesystem. Same device as the app means no mount.
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  const problems = [];
+  const store = new EventStore({
+    logPath: join(dir, 'events.jsonl'),
+    durabilityReference: dir,
+    onError: (message) => problems.push(message),
+  });
+
+  const summary = await store.restore();
+  assert.equal(summary.durable, false);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /not on a mounted volume/);
+  assert.match(problems[0], /Attach a Railway volume/);
+});
+
+test('durability is reported as unknown rather than guessed when it cannot be checked', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lob-events-'));
+  assert.equal(await looksDurable(dir, join(dir, 'does-not-exist')), null);
+  assert.equal(await looksDurable(join(dir, 'does-not-exist'), dir), null);
+  assert.equal(await looksDurable(dir, dir), false, 'a path is never a mount of itself');
+
+  // Unknown must not produce the warning: a diagnostic that cries wolf on
+  // platforms it cannot read is worse than staying quiet.
+  const problems = [];
+  const store = new EventStore({
+    logPath: join(dir, 'events.jsonl'),
+    durabilityReference: join(dir, 'does-not-exist'),
+    onError: (message) => problems.push(message),
+  });
+  const summary = await store.restore();
+  assert.equal(summary.durable, null);
+  assert.equal(problems.length, 0);
+});
+
+test('an in-memory store reports no durability opinion at all', async () => {
+  const store = new EventStore({});
+  assert.deepEqual(await store.restore(), { restored: 0, skipped: 0, durable: null });
 });
 
 test('a failing event log never breaks recording', async () => {
