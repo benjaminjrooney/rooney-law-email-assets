@@ -64,7 +64,9 @@ set there, and the add-in surfaces that refusal as an error on the recipient.
    ```
 
    `{"ok":true, ...}` means the service is configured. If `ok` is false, the
-   `problems` array names each missing variable.
+   `problems` array names each missing variable. `/health` is an alias for the
+   same check, so either path works — point an uptime monitor at whichever one
+   it defaults to.
 
 ## 3. Build the manifest
 
