@@ -100,7 +100,9 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
 
   // ---------------------------------------------------------------- health --
 
-  app.get('/healthz', (_req, res) => {
+  // /healthz is the canonical path and what railway.json health-checks; /health
+  // is an alias so uptime monitors and humans guessing the URL land somewhere.
+  app.get(['/healthz', '/health'], (_req, res) => {
     const problems = configProblems(config);
     res.json({
       ok: problems.length === 0,

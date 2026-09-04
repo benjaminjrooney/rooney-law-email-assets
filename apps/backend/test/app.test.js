@@ -36,6 +36,15 @@ test('healthz is public and reports configuration problems', async () => {
   );
 });
 
+test('health is a public alias for healthz', async () => {
+  await withServer(async ({ server }) => {
+    const alias = await server.get('/health', { token: null });
+    const canonical = await server.get('/healthz', { token: null });
+    assert.equal(alias.status, 200);
+    assert.deepEqual(alias.body, canonical.body);
+  });
+});
+
 test('the API rejects missing and wrong tokens', async () => {
   await withServer(async ({ server }) => {
     assert.equal((await server.get('/api/config', { token: null })).status, 401);
