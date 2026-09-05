@@ -356,12 +356,21 @@ root:
    so migrations and reference-data seeding happen on each deploy. The health
    check is `/api/health`.
 
-5. **Create the first account** — from the service shell, or locally against
-   the same `DATABASE_URL`:
+5. **Create the first account.** Set these three variables before the first
+   deploy and the migration step creates it for you — no shell needed:
 
-   ```bash
-   npm run seed:users -- --email you@example.com --name "Your Name" --role admin
-   ```
+   | Variable | Value |
+   |---|---|
+   | `BOOTSTRAP_ADMIN_EMAIL` | your email |
+   | `BOOTSTRAP_ADMIN_PASSWORD` | 12+ chars, mixed case, a digit |
+   | `BOOTSTRAP_ADMIN_NAME` | your name |
+
+   Delete `BOOTSTRAP_ADMIN_PASSWORD` once you have signed in. An account that
+   already exists is never silently re-passworded; `BOOTSTRAP_ADMIN_FORCE=true`
+   is the deliberate escape hatch for a forgotten password.
+
+   With shell or direct database access you can use `npm run seed:users --
+   --email you@example.com --name "Your Name" --role admin` instead.
 
 6. **Keep it private.** There is no public route: `src/middleware.ts` requires
    a session everywhere except `/login` and `/api/health`.
