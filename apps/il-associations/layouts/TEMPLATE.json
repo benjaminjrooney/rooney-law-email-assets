@@ -1,0 +1,38 @@
+[
+  {
+    "key": "file_number",
+    "label": "Illinois file number",
+    "start": 0,
+    "length": 0,
+    "role": "file_number",
+    "provenance": "unmapped",
+    "notes": "Replace start and length with the documented positions, then set provenance to documented and add documentedBy."
+  },
+  {
+    "key": "legal_name",
+    "label": "Legal entity name",
+    "start": 0,
+    "length": 0,
+    "role": "legal_name",
+    "provenance": "unmapped",
+    "notes": "Name file only."
+  },
+  {
+    "key": "agent_name",
+    "label": "Registered agent name",
+    "start": 0,
+    "length": 0,
+    "role": "agent_name",
+    "provenance": "unmapped",
+    "notes": "Agent file only."
+  },
+  {
+    "key": "status_code",
+    "label": "Status code",
+    "start": 0,
+    "length": 0,
+    "role": "status_code",
+    "provenance": "unmapped",
+    "notes": "Master file. Leave provenance unmapped until a documented code list exists; the app will show the raw code and say so."
+  }
+]

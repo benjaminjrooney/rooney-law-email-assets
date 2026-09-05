@@ -1,0 +1,59 @@
+{
+  "name": "il-associations",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Illinois community association market-share database",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "seed:users": "tsx src/scripts/seed-users.ts",
+    "import": "tsx src/scripts/import-cli.ts",
+    "refresh": "tsx src/scripts/scheduled-refresh.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/lib-storage": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
+    "@types/yazl": "^3.3.1",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.44.7",
+    "exceljs": "^4.4.0",
+    "jose": "^6.2.12",
+    "next": "16.3.4",
+    "postgres": "^3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.6.0",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@next/eslint-plugin-next": "16.3.4",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/yauzl": "^2.10.3",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.5",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^3.2.7"
+  }
+}

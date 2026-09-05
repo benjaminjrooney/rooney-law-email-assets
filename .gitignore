@@ -4,3 +4,14 @@ node_modules/
 apps/word-addin/build/
 *.log
 .DS_Store
+
+# Next.js app (apps/il-associations)
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# Local object storage and any raw Illinois bulk files. The official datasets
+# and generated exports are never committed.
+.storage/
+*.zip
+apps/il-associations/**/*.txt

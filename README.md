@@ -1,7 +1,8 @@
-# Rooney Law — mail add-in and public assets
+# Rooney Law — internal tools and public assets
 
-This repository holds two unrelated things: the Word add-in that mails letters
-through Lob, and the public email-signature wordmark that predates it.
+This repository holds three unrelated things: the Word add-in that mails letters
+through Lob, the Illinois community-association market-share database, and the
+public email-signature wordmark that predates both.
 
 ## Mail via Lob (Word add-in + Railway backend)
 
@@ -52,6 +53,44 @@ Secrets live only in Railway's environment variables — see
 [`apps/backend/.env.example`](apps/backend/.env.example). The add-in stores the
 service URL and access token in the local browser storage of the machine it runs
 on, never inside the document.
+
+## Illinois community associations (market-share database)
+
+A private Next.js application, deployed as its own Railway service, that imports
+the Illinois Secretary of State's Business Data Transparency Act bulk files and
+turns them into a searchable roster of community associations with registered-
+agent market share.
+
+```
+apps/il-associations/    Next.js app, PostgreSQL + Drizzle, importer, exporters
+```
+
+It identifies community associations by versioned legal-name rules, groups
+registered agents conservatively (so the four spellings of
+`COSTELLO SURY & ROONEY, P.C.` count as one firm while each exact source form is
+preserved), classifies each agent with deterministic and fully explainable
+rules, and exports CSV, a multi-sheet Excel workbook and a backup bundle.
+
+Two limits are built in on purpose rather than hidden: **no fixed-width field
+positions ship with the app** — an administrator transcribes them from the
+official ILSOS record-layout documentation and the importer refuses to write
+until they do — and **entity status codes are shown raw** until a documented
+mapping exists. Automatic agent classification is labelled provisional
+everywhere it appears.
+
+- **Everything else:** [`apps/il-associations/README.md`](apps/il-associations/README.md)
+  — local setup, Railway deployment, environment variables, migrations, import
+  and backup instructions, and the test commands.
+
+```bash
+cd apps/il-associations
+npm install && npm run db:migrate && npm run dev
+```
+
+This app has its own `package.json` and lockfile and is deliberately **not** a
+workspace of the root project, so its Next.js toolchain never interferes with
+the Lob backend's dependencies or test runner. The root `npm test` covers the
+add-in and backend; `npm run test:il-associations` covers this app.
 
 ## Email signature wordmark
 

@@ -64,3 +64,41 @@ jobs:
           "
       - name: Check the XML parses
         run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('apps/word-addin/build/manifest.xml'); print('well-formed')"
+
+  # The Illinois community-association database. Runs against a real Postgres
+  # so the import, override-preservation and export suites execute rather than
+  # skipping themselves.
+  il-associations:
+    name: IL associations (lint, types, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/il-associations
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/il-associations/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/il_assoc_test
+      - name: Production build
+        run: npm run build

@@ -13,9 +13,10 @@
   "scripts": {
     "start": "node apps/backend/src/index.js",
     "dev": "node --watch apps/backend/src/index.js",
-    "test": "node --test --test-reporter=spec",
+    "test": "node --test --test-reporter=spec \"apps/backend/test/*.test.js\" \"apps/word-addin/test/*.test.js\"",
     "manifest": "node apps/word-addin/tools/build-manifest.mjs",
-    "icons": "node apps/word-addin/tools/make-icons.mjs"
+    "icons": "node apps/word-addin/tools/make-icons.mjs",
+    "test:il-associations": "npm --prefix apps/il-associations test"
   },
   "license": "UNLICENSED"
 }
