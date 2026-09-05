@@ -330,11 +330,23 @@ root:
    repository.
 
 2. **Point the service at this app.** In the service's **Settings**:
-   - **Root Directory**: `apps/il-associations`
-   - **Config-as-code path**: `railway.json` (relative to that root)
+
+   | Setting | Value |
+   |---|---|
+   | Root Directory | `apps/il-associations` |
+   | Start Command | `npm run db:migrate && npm start` |
+   | Healthcheck Path | `/api/health` |
+   | Healthcheck Timeout | `300` |
+   | Watch Paths | `apps/il-associations/**` |
 
    That keeps this service separate from the Word add-in backend that also
-   lives in this repository.
+   lives in this repository, and stops a change to one redeploying the other.
+
+   These live in the service settings rather than a `railway.json`, because
+   Railway has deprecated config-as-code in favour of
+   [Infrastructure as Code](https://docs.railway.com/infrastructure-as-code).
+   Leave the build command empty — Nixpacks installs and builds correctly on
+   its own, and overriding it with `npm ci` fights its build cache.
 
 3. **Set variables** (Settings → Variables):
 
@@ -353,8 +365,11 @@ root:
    and generated exports on every redeploy.
 
 4. **Deploy.** The start command runs `npm run db:migrate` before `npm start`,
-   so migrations and reference-data seeding happen on each deploy. The health
-   check is `/api/health`.
+   so migrations, reference-data seeding and first-run admin bootstrap happen on
+   each deploy. The health check is `/api/health`.
+
+   `tsx` is a runtime dependency, not a dev one, precisely because that start
+   command needs it after a production install.
 
 5. **Create the first account.** Set these three variables before the first
    deploy and the migration step creates it for you — no shell needed:
