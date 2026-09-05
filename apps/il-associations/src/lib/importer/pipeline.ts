@@ -7,7 +7,14 @@ import {
   type InclusionMatch,
 } from "@/lib/domain/inclusion";
 import { normalizeAgentName, normalizeEntityName } from "@/lib/domain/text";
-import { assertLayoutUsable, type EntityFamily, type FileKind, type RecordLayout } from "@/lib/ilsos/layout";
+import {
+  TRAILER_PATTERN,
+  assertLayoutUsable,
+  readTrailerCount,
+  type EntityFamily,
+  type FileKind,
+  type RecordLayout,
+} from "@/lib/ilsos/layout";
 import { extractFields, readRecords } from "@/lib/ilsos/parser";
 import { openSourceStream, type ContainerFormat } from "@/lib/ilsos/archive";
 import { UNMAPPED_STATUS_LABEL } from "@/lib/db/schema";
@@ -100,6 +107,10 @@ export type StageFileInput = {
 export type StageResult = {
   recordsLoaded: number;
   errors: number;
+  /** Record count declared by the file's trailer, when it carries one. */
+  declaredCount: number | null;
+  /** Non-fatal problems worth showing the operator. */
+  warnings: string[];
 };
 
 /** Record a non-fatal problem against the run without aborting it. */
@@ -148,7 +159,8 @@ export async function stageSourceFile(
     RETURNING records_loaded, completed`;
 
   if (progress?.completed) {
-    return { recordsLoaded: progress.records_loaded, errors: 0 };
+    // Already staged by an earlier attempt at this run; nothing to redo.
+    return { recordsLoaded: progress.records_loaded, errors: 0, declaredCount: null, warnings: [] };
   }
 
   const alreadyLoaded = progress?.records_loaded ?? 0;
@@ -165,6 +177,8 @@ export async function stageSourceFile(
   let recordNumber = 0;
   let errors = 0;
   let loaded = 0;
+  let declaredCount: number | null = null;
+  const warnings: string[] = [];
   let batch: Record<string, unknown>[] = [];
 
   const flush = async () => {
@@ -196,6 +210,18 @@ export async function stageSourceFile(
       recordLength: input.layout.recordLength,
       skip: input.skip,
     })) {
+      /*
+       * ILSOS files close with a trailer, e.g.
+       *   END OF FILE RECORD COUNT= 1494050
+       * Parsing it as a record would create an entity whose file number is the
+       * literal text "END OF F". Skip it, and keep the count it declares as a
+       * check on the load.
+       */
+      if (TRAILER_PATTERN.test(line)) {
+        declaredCount = readTrailerCount(line);
+        continue;
+      }
+
       recordNumber += 1;
       const parsed = extractFields(line, input.layout);
       const fileNumber = (parsed.values.file_number ?? "").trim();
@@ -239,7 +265,25 @@ export async function stageSourceFile(
     SET completed = true, updated_at = now()
     WHERE import_run_id = ${importRunId} AND source_file_id = ${input.sourceFileId}`;
 
-  return { recordsLoaded: loaded, errors };
+  // The trailer's count is a free integrity check: a mismatch means the file
+  // was truncated in transit, or the record delimiter was misread.
+  if (declaredCount !== null && declaredCount !== recordNumber) {
+    const message =
+      `${input.family}/${input.fileKind}: the file's trailer declares ${declaredCount.toLocaleString("en-US")} ` +
+      `records but ${recordNumber.toLocaleString("en-US")} were read. The file may be truncated.`;
+    warnings.push(message);
+    errors += 1;
+    await recordError(sql, importRunId, {
+      sourceFileId: input.sourceFileId,
+      family: input.family,
+      fileKind: input.fileKind,
+      severity: "error",
+      code: "record_count_mismatch",
+      message,
+    });
+  }
+
+  return { recordsLoaded: loaded, errors, declaredCount, warnings };
 }
 
 // ---------------------------------------------------------------------------

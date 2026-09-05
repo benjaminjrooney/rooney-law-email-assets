@@ -4,10 +4,13 @@ import { extractFields, readRecords, readFirstRecords, hashRecord } from "@/lib/
 import { inspectHeader, readRunDate } from "@/lib/ilsos/header";
 import { inferColumns } from "@/lib/ilsos/infer";
 import {
+  HEADER_TOKENS,
+  TRAILER_PATTERN,
   assertLayoutUsable,
   emptyLayout,
   fieldForRole,
   LayoutError,
+  readTrailerCount,
   validateLayout,
   type RecordLayout,
 } from "@/lib/ilsos/layout";
@@ -174,6 +177,98 @@ describe("header validation", () => {
   it("flags an ambiguous 8-digit date instead of silently choosing", () => {
     const reading = readRunDate("LLCALLNAM 09012026");
     expect(reading?.warning).toMatch(/ambiguous|MMDDYYYY/);
+  });
+});
+
+/**
+ * These cases come from a real September 2026 `llcallnam.zip`: a header that
+ * names the dataset rather than the filename, a trailer record carrying the
+ * record count, and variable-length records with no gutter between fields.
+ */
+describe("real ILSOS file shape", () => {
+  const REAL_HEADER = "RUN DATE=20260904   FILE:LLC MASTER NAME DATA";
+  const REAL_TRAILER = "END OF FILE RECORD COUNT= 1494050";
+
+  it("reads the run date out of the real header format", () => {
+    expect(readRunDate(REAL_HEADER)?.date).toBe("2026-09-04");
+  });
+
+  it("accepts a real header against the observed token", () => {
+    const result = inspectHeader(REAL_HEADER, {
+      header: { expectToken: HEADER_TOKENS.llc.name, expectHeader: true },
+      recordLength: null,
+    });
+    expect(result.tokenMatched).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.sourceRunDate).toBe("2026-09-04");
+  });
+
+  it("does not reject the file merely because the filename is not in the header", () => {
+    // The header says "LLC MASTER NAME DATA", never "llcallnam". Checking for
+    // the filename would reject every genuine file.
+    const result = inspectHeader(REAL_HEADER, {
+      header: { expectToken: "llcallnam", expectHeader: true },
+      recordLength: null,
+    });
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(HEADER_TOKENS.llc.name).not.toMatch(/llcallnam/i);
+  });
+
+  it("warns instead of rejecting when no token has been established", () => {
+    const result = inspectHeader(REAL_HEADER, {
+      header: { expectToken: "", expectHeader: true },
+      recordLength: null,
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.join(" ")).toMatch(/no expected header text/i);
+  });
+
+  it("still rejects a genuinely wrong file", () => {
+    const result = inspectHeader("RUN DATE=20260904   FILE:CORP MASTER AGENT DATA", {
+      header: { expectToken: HEADER_TOKENS.llc.name, expectHeader: true },
+      recordLength: null,
+    });
+    expect(result.errors.join(" ")).toMatch(/wrong file/i);
+  });
+
+  it("recognises the trailer record and reads its declared count", () => {
+    expect(TRAILER_PATTERN.test(REAL_TRAILER)).toBe(true);
+    expect(readTrailerCount(REAL_TRAILER)).toBe(1_494_050);
+    // A real entity name must never look like a trailer.
+    expect(TRAILER_PATTERN.test("00000019JAY-FOUR L.L.C.")).toBe(false);
+  });
+
+  it("parses a real record where the name runs flush against the file number", async () => {
+    const layout: RecordLayout = {
+      ...nameLayout("llc"),
+      recordLength: null,
+      fields: [
+        { key: "file_number", label: "File number", start: 1, length: 8, role: "file_number", provenance: "operator_confirmed" },
+        { key: "legal_name", label: "Legal name", start: 9, length: 120, role: "legal_name", provenance: "operator_confirmed" },
+      ],
+    };
+
+    const body = [
+      REAL_HEADER,
+      "00000019JAY-FOUR L.L.C.",
+      "00025917PONTARELLI CHICAGOLAND'S LARGEST CONDOMINIUM BUILDER, L.L.C.",
+      REAL_TRAILER,
+    ].join("\r\n");
+
+    const records: string[] = [];
+    for await (const line of readRecords(Readable.from([Buffer.from(body, "latin1")]), { skip: 1 })) {
+      records.push(line);
+    }
+    expect(records).toHaveLength(3);
+
+    const first = extractFields(records[0]!, layout);
+    expect(first.values.file_number).toBe("00000019");
+    expect(first.values.legal_name).toBe("JAY-FOUR L.L.C.");
+
+    const second = extractFields(records[1]!, layout);
+    expect(second.values.legal_name).toBe(
+      "PONTARELLI CHICAGOLAND'S LARGEST CONDOMINIUM BUILDER, L.L.C.",
+    );
   });
 });
 

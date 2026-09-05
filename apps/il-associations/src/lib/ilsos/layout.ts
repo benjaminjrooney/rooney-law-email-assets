@@ -77,8 +77,10 @@ export type LayoutField = {
 
 export type HeaderRule = {
   /**
-   * Token that must appear in the header record for the file to be accepted,
-   * e.g. "LLCALLNAM". Used to reject an obviously wrong file type.
+   * Text that must appear in the header record for the file to be accepted,
+   * e.g. "LLC MASTER NAME DATA". Empty means no token has been established for
+   * this slot yet, in which case the header is reported but nothing is
+   * rejected — see HEADER_TOKENS.
    */
   expectToken: string;
   /** Whether a header record is expected at all. */
@@ -113,11 +115,47 @@ export const REQUIRED_ROLES: Record<FileKind, SemanticRole[]> = {
   master: ["file_number"],
 };
 
-/** Expected source filenames, used for header checks and wizard guidance. */
+/** Expected source filenames, used for wizard guidance. */
 export const EXPECTED_FILES: Record<EntityFamily, Record<FileKind, string>> = {
   llc: { name: "llcallnam", agent: "llcallagt", master: "llcallmst" },
   cdx: { name: "cdxallnam", agent: "cdxallagt", master: "cdxallmst" },
 };
+
+/**
+ * Text expected inside a file's header record.
+ *
+ * This is NOT the filename. A real header looks like:
+ *
+ *   RUN DATE=20260904   FILE:LLC MASTER NAME DATA
+ *
+ * so checking for "llcallnam" rejects every genuine file. Only the LLC Name
+ * token below has actually been observed (in a September 2026 file); the rest
+ * are empty because they have not been, and this build does not guess at them.
+ *
+ * An empty token means "not established yet": the header is reported to the
+ * operator but nothing is rejected. Confirming a layout records the token from
+ * the file in hand, so every later upload into that slot is checked against it.
+ */
+export const HEADER_TOKENS: Record<EntityFamily, Record<FileKind, string>> = {
+  llc: { name: "LLC MASTER NAME DATA", agent: "", master: "" },
+  cdx: { name: "", agent: "", master: "" },
+};
+
+/**
+ * ILSOS files close with a trailer rather than a data record, e.g.
+ *
+ *   END OF FILE RECORD COUNT= 1494050
+ *
+ * It must never be parsed as an entity, and the count it declares is a free
+ * integrity check on the load.
+ */
+export const TRAILER_PATTERN = /^END OF FILE/i;
+
+/** Read the record count a trailer declares, if it carries one. */
+export function readTrailerCount(line: string): number | null {
+  const match = /RECORD COUNT\s*=?\s*(\d+)/i.exec(line);
+  return match ? Number(match[1]) : null;
+}
 
 export const FAMILY_LABELS: Record<EntityFamily, string> = {
   llc: "Limited liability companies",
@@ -136,7 +174,7 @@ export function emptyLayout(family: EntityFamily, fileKind: FileKind): RecordLay
     version: 1,
     status: "unconfirmed",
     recordLength: null,
-    header: { expectToken: EXPECTED_FILES[family][fileKind], expectHeader: true },
+    header: { expectToken: HEADER_TOKENS[family][fileKind], expectHeader: true },
     fields: [],
     sourceDocument: null,
     requiredRoles: REQUIRED_ROLES[fileKind],

@@ -15,15 +15,20 @@ authentication.
 
 Two limits are designed into the app rather than papered over.
 
-**1. No field positions ship with this build.** The official ILSOS
+**1. Five of the six record layouts still need you.** The official ILSOS
 record-layout documentation could not be retrieved when the application was
 built (`www.ilsos.gov` was unreachable from the build environment). The brief
 is explicit that field definitions must never be invented, so they aren't.
-Instead, layouts are operator-owned data: the import wizard shows you the
-column boundaries it can *observe* in your own file, you transcribe the real
-positions from the official documentation, cite it, and confirm. **The importer
-refuses to run in write mode against an unconfirmed layout.** See
+Layouts are operator-owned data: the import wizard shows you the column
+boundaries it can *observe* in your own file, you transcribe the real positions
+from the official documentation, cite it, and confirm. **The importer refuses to
+run in write mode against an unconfirmed layout.** See
 [`layouts/README.md`](layouts/README.md).
+
+The exception is the **LLC Name** file, which this build has actually seen. Its
+layout is seeded as confirmed, and its citation says plainly that it was derived
+from 1,494,050 real records rather than transcribed from documentation. You can
+re-edit it like any other.
 
 **2. Entity status is unmapped.** No documented status-code list was available,
 so status codes are retained verbatim and displayed as
@@ -78,6 +83,15 @@ Nothing holds a file in memory. Batches run in transactions.
 
 **Idempotent.** A run's `bundle_digest` is the hash of its six file hashes; a
 completed write run with the same digest makes a repeat import a no-op.
+
+**Header and trailer.** A real header reads
+`RUN DATE=20260904   FILE:LLC MASTER NAME DATA` — it names the dataset, not the
+filename, so the expected text per slot is learned from the first file you
+confirm rather than assumed. Until a slot has one, a file is reported but never
+rejected. The files also close with a trailer
+(`END OF FILE RECORD COUNT= 1494050`); it is skipped rather than loaded as an
+entity, and the count it declares is checked against the number of records
+actually read, which catches a truncated download.
 
 **Operator work is never overwritten.** The importer's upserts deliberately do
 not touch `override_category`, `override_note`, `display_name`, `reviewed_by`
@@ -147,9 +161,9 @@ npm run seed:users -- --email you@example.com --name "Your Name" --role admin
 npm run dev                       # http://localhost:3000
 ```
 
-`db:migrate` is idempotent and also seeds the six **unconfirmed** record
-layouts. `seed:users` prints a generated password once if you don't pass
-`--password`.
+`db:migrate` is idempotent. It also seeds Rule Set v1 and the six record
+layouts — five unconfirmed, plus the LLC Name layout derived from real data.
+`seed:users` prints a generated password once if you don't pass `--password`.
 
 ### Commands
 
@@ -161,6 +175,7 @@ layouts. `seed:users` prints a generated password once if you don't pass
 | `npm run db:migrate` | Apply migrations, seed rule set and layouts |
 | `npm run seed:users -- --email … --role admin` | Create or reset an account |
 | `npm run import -- …` | Command-line import (see below) |
+| `npm run inspect -- --file …` | Report on a source file without importing it |
 | `npm run refresh` | Optional scheduled refresh entry point |
 | `npm run lint` / `npm run typecheck` / `npm test` | Checks |
 
@@ -211,14 +226,50 @@ npm run import -- --bundle 3 --preview     # dry run against an existing bundle
 npm run import -- --bundle 3 --resume      # continue an interrupted run
 ```
 
+### Looking at a file before importing it
+
+`npm run inspect` reads a source file and reports what it finds, without
+writing anything and without needing a database:
+
+```bash
+npm run inspect -- --file ./llcallnam.zip --family llc --kind name
+```
+
+It prints the header and run date, the record and trailer counts, the observed
+column boundaries, and — for a Name file — how many entities the active rule set
+would qualify, broken down by signal. `--rules <version>` runs a different rule
+set, which is how a proposed rule set is tested against the real dataset before
+it is activated.
+
 ### Validating the first import
 
 Against the September 2026 files under Rule Set v1, expect roughly **33,000**
 qualifying associations — about **1,800 LLCs** and **31,000** corporations and
 not-for-profit corporations — and a large number of distinct registered-agent
-names. If your counts are far from that, the record layout is the first thing
-to re-check: a column boundary off by a few characters truncates names and
-changes which entities match.
+names.
+
+The LLC half of that has been checked against the real file. A September 2026
+`llcallnam.txt` holds 1,494,050 entities, of which Rule Set v1 qualifies
+**1,782** — against the expected ~1,800:
+
+| Signal | Entities |
+|---|---:|
+| condo | 577 |
+| condominium | 418 |
+| townhome / townhouse | 391 |
+| homeowner(s) | 165 |
+| property owner(s) | 154 |
+| community association | 38 |
+| HOA | 37 |
+| housing co-operative | 5 |
+| master association | 1 |
+
+(An entity can match several signals, so these overlap and sum to more than
+1,782.)
+
+If your counts are far from expectation, the record layout is the first thing to
+re-check: a column boundary off by a few characters truncates names and changes
+which entities match.
 
 Do not assume an agent is a management company or a law firm without going
 through **Classification review**.

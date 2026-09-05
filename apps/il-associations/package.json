@@ -15,6 +15,7 @@
     "db:studio": "drizzle-kit studio",
     "seed:users": "tsx src/scripts/seed-users.ts",
     "import": "tsx src/scripts/import-cli.ts",
+    "inspect": "tsx src/scripts/inspect-source.ts",
     "refresh": "tsx src/scripts/scheduled-refresh.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -6,16 +6,47 @@ bulk files.
 
 ## Why this directory is (almost) empty
 
-**This application ships no field positions.** The official ILSOS record-layout
-documentation could not be retrieved when the application was built, and the
-brief is explicit that field definitions must never be invented — a guessed
-column boundary silently corrupts every record it touches, and a guessed status
-code silently mislabels an entity's legal standing.
+**This application ships almost no field positions.** The official ILSOS
+record-layout documentation could not be retrieved when the application was
+built, and the brief is explicit that field definitions must never be invented —
+a guessed column boundary silently corrupts every record it touches, and a
+guessed status code silently mislabels an entity's legal standing.
 
-So layouts are *operator-owned data*, not code. Each of the six files has a row
+So layouts are *operator-owned data*, not code. Five of the six files have a row
 in the `record_layouts` table that starts out `unconfirmed` with an empty field
 list, and **the importer refuses to run in write mode against an unconfirmed
 layout**.
+
+### The one exception: LLC Name
+
+This build has seen a real September 2026 `llcallnam.txt`, so that layout is
+seeded as confirmed:
+
+| Columns | Field | Role |
+|---|---|---|
+| 1–8 | Illinois file number | `file_number` |
+| 9–128 | Legal entity name | `legal_name` |
+
+Records are **variable length**, CRLF-delimited, with **no gutter** between the
+two fields, and the file closes with an `END OF FILE RECORD COUNT=` trailer.
+Across all 1,494,050 records every one carries eight leading digits, and there
+are no repeated file numbers — one record per entity.
+
+Its `provenance` is `operator_confirmed`, not `documented`, and its citation
+says so: it was derived from the data, not transcribed from the official record
+layout. If you obtain the real documentation and it disagrees, the documentation
+wins — re-edit the layout in the wizard.
+
+### What a real header looks like
+
+```
+RUN DATE=20260904   FILE:LLC MASTER NAME DATA
+```
+
+It names the **dataset**, not the filename: checking for `llcallnam` would
+reject every genuine file. The expected text for each slot is recorded when you
+confirm that slot's layout, and until then a file is reported to you but never
+rejected.
 
 ## Filling one in
 

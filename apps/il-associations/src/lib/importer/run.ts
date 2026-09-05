@@ -204,6 +204,7 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
         skip: 1,
       });
       counts.errors += result.errors;
+      warnings.push(...result.warnings);
       await rm(localPath, { force: true });
     }
 

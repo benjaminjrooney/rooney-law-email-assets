@@ -125,7 +125,10 @@ export function inspectHeader(
   const token = (options.expectedTokenOverride ?? layout.header.expectToken).toUpperCase();
   const upper = firstLine.toUpperCase();
 
-  const tokenMatched = token.length > 0 && upper.includes(token);
+  // A real header reads "RUN DATE=20260904   FILE:LLC MASTER NAME DATA", so the
+  // token is matched with punctuation and spacing flattened.
+  const flatten = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+  const tokenMatched = token.length > 0 && flatten(upper).includes(flatten(token));
   const reading = readRunDate(firstLine);
   if (reading?.warning) warnings.push(reading.warning);
 
@@ -140,9 +143,18 @@ export function inspectHeader(
     );
   }
 
-  if (headerPresent && !tokenMatched && token.length > 0) {
+  if (headerPresent && token.length === 0) {
+    // Nothing has been established for this slot yet, so there is nothing to
+    // check against. Report the header and let the operator confirm it rather
+    // than rejecting a file on a guess.
+    warnings.push(
+      "No expected header text has been recorded for this slot yet. Check that the header above " +
+        "names the right file, then confirm the layout to record it — later uploads will be " +
+        "checked against it automatically.",
+    );
+  } else if (headerPresent && !tokenMatched) {
     errors.push(
-      `The header record does not contain the expected token "${token.toUpperCase()}". ` +
+      `The header record does not contain the expected text "${token}". ` +
         "This is probably the wrong file for this slot.",
     );
   }

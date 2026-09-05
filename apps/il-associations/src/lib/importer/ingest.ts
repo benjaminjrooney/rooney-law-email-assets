@@ -11,7 +11,7 @@ import { inspectHeader, type HeaderInspection } from "@/lib/ilsos/header";
 import { inferColumns, type InferenceReport } from "@/lib/ilsos/infer";
 import { readFirstRecords } from "@/lib/ilsos/parser";
 import {
-  EXPECTED_FILES,
+  HEADER_TOKENS,
   type EntityFamily,
   type FileKind,
   type RecordLayout,
@@ -68,7 +68,7 @@ export async function inspectSourceFile(
     recordLength: layout?.recordLength ?? null,
   });
 
-  const expectToken = EXPECTED_FILES[family][fileKind];
+  const expectToken = HEADER_TOKENS[family][fileKind];
   const header = inspectHeader(sample[0] ?? "", {
     header: layout?.header ?? { expectToken, expectHeader: true },
     recordLength: layout?.recordLength ?? null,
