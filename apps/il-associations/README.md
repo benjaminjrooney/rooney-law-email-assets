@@ -83,6 +83,37 @@ apps/il-associations/
 **Stack.** TypeScript, Next.js (App Router), PostgreSQL, Drizzle ORM, Tailwind
 CSS with a local shadcn-style component kit, Recharts, ExcelJS.
 
+### Scheduled refresh
+
+Off unless two switches are both on: `ENABLE_SCHEDULED_REFRESH=true` in the
+environment, and the setting under Imports and updates. A recurring import never
+starts because someone added a cron entry, or toggled a setting and forgot.
+
+With source URLs saved, the job downloads the files itself into a fresh bundle
+and imports it. Without them it falls back to importing an uploaded bundle that
+is ready and not yet imported. A family is only refreshed when all three of its
+files have a URL — a partial family is skipped rather than half-fetched, because
+the importer will not run one anyway.
+
+ILSOS regenerates every file daily and each is a complete snapshot rather than a
+set of changes, so any run picks up everything and a missed week costs nothing.
+
+**The archive guard.** Archiving is driven by absence: anything a run does not
+touch is marked not current. That is correct when the source file is correct and
+catastrophic when it is not — a truncated download, or an error page served in
+place of the data, yields no entities and would retire the whole roster while
+reporting success. So:
+
+- Matching **nothing at all** is refused for any run, scheduled or manual. It is
+  never a real result.
+- A **scheduled** run additionally stops if more than half the family would be
+  archived. A person can make that change by hand after looking at it; a cron
+  cannot look.
+
+Either way nothing is archived and the job exits non-zero, which is what a
+scheduler notices. `test/archive-guard.test.ts` covers both limits, the ordinary
+churn that must still pass, and the first import into an empty database.
+
 ### Getting the files in
 
 Two paths, both on the bundle page.

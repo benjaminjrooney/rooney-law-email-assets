@@ -243,7 +243,12 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
       counts.unmatched += result.counts.unmatched;
       warnings.push(...result.warnings);
 
-      counts.archived += await finishFamily(sql, { importRunId, family, mode: options.mode });
+      counts.archived += await finishFamily(sql, {
+        importRunId,
+        family,
+        mode: options.mode,
+        trigger: options.trigger,
+      });
     }
 
     // ---- Phase 3: finish --------------------------------------------------

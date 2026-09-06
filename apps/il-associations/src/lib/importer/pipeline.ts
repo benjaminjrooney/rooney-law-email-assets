@@ -790,9 +790,25 @@ async function persistBatch(
  *
  * Archiving is a soft delete: history and operator notes survive.
  */
+export class ArchiveGuardError extends Error {}
+
+/**
+ * Above this share, a scheduled run refuses to archive rather than proceed.
+ *
+ * A week of ordinary churn moves a fraction of a percent. Half the roster
+ * disappearing means the source was wrong, not that half the associations
+ * dissolved.
+ */
+const SCHEDULED_ARCHIVE_LIMIT = 0.5;
+
 export async function finishFamily(
   sql: Sql,
-  options: { importRunId: number; family: EntityFamily; mode: "preview" | "write" },
+  options: {
+    importRunId: number;
+    family: EntityFamily;
+    mode: "preview" | "write";
+    trigger?: "manual" | "cli" | "scheduled";
+  },
 ): Promise<number> {
   if (options.mode === "preview") {
     const [row] = await sql<{ n: number }[]>`
@@ -800,6 +816,50 @@ export async function finishFamily(
       WHERE entity_family = ${options.family} AND is_current = true
         AND last_import_run_id IS DISTINCT FROM ${options.importRunId}`;
     return row?.n ?? 0;
+  }
+
+  /*
+   * Refuse to archive a roster the run cannot account for.
+   *
+   * Archiving is driven by absence: anything this run did not touch is marked
+   * not current. That is right when the source file is right, and catastrophic
+   * when it is not — a truncated download, or an error page served instead of
+   * the data, yields zero entities and would retire every association in the
+   * family while reporting success.
+   *
+   * A person running an import sees the counts and can judge. A Friday-morning
+   * cron cannot, so the two are treated differently: matching nothing at all is
+   * refused for anybody, and a scheduled run additionally stops at half.
+   */
+  const [tally] = await sql<{ before: number; kept: number }[]>`
+    SELECT
+      count(*) FILTER (WHERE is_current = true)::int AS before,
+      count(*) FILTER (WHERE is_current = true
+                        AND last_import_run_id = ${options.importRunId})::int AS kept
+    FROM associations WHERE entity_family = ${options.family}`;
+
+  const before = tally?.before ?? 0;
+  const kept = tally?.kept ?? 0;
+  const wouldArchive = before - kept;
+
+  if (before > 0 && kept === 0) {
+    throw new ArchiveGuardError(
+      `Refusing to archive all ${before.toLocaleString("en-US")} ${options.family} associations: ` +
+        "this run matched none of them. That normally means the source file was not the file it " +
+        "should be — a truncated download, or an error page saved as a ZIP. Nothing was archived.",
+    );
+  }
+
+  if (
+    options.trigger === "scheduled" &&
+    before > 0 &&
+    wouldArchive / before > SCHEDULED_ARCHIVE_LIMIT
+  ) {
+    throw new ArchiveGuardError(
+      `Refusing to archive ${wouldArchive.toLocaleString("en-US")} of ${before.toLocaleString("en-US")} ` +
+        `${options.family} associations (${Math.round((wouldArchive / before) * 100)}%) on a scheduled run. ` +
+        "Import this bundle by hand if the drop is real. Nothing was archived.",
+    );
   }
 
   const archived = await sql<{ id: number; file_number: string; legal_name: string; record_hash: string }[]>`

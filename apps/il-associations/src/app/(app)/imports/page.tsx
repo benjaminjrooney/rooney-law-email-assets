@@ -16,7 +16,12 @@ import {
 } from "@/components/ui";
 import { getSql } from "@/lib/db";
 import { createBundle, setScheduledRefresh } from "@/lib/actions/imports";
-import { FAMILY_LABELS, FILE_KINDS, ENTITY_FAMILIES } from "@/lib/ilsos/layout";
+import {
+  ENTITY_FAMILIES,
+  EXPECTED_FILES,
+  FAMILY_LABELS,
+  FILE_KINDS,
+} from "@/lib/ilsos/layout";
 import type { ImportCounts } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -70,11 +75,15 @@ export default async function ImportsPage() {
       SELECT family, file_kind, status, record_length, source_document, confirmed_by,
              jsonb_array_length(fields)::int AS field_count
       FROM record_layouts WHERE is_active = true ORDER BY family, file_kind`,
-    sql<{ value: { enabled: boolean; cadence: string } }[]>`
-      SELECT value FROM app_settings WHERE key = 'scheduled_refresh'`,
+    sql<
+      {
+        value: { enabled: boolean; cadence: string; sources?: Record<string, string> };
+      }[]
+    >`SELECT value FROM app_settings WHERE key = 'scheduled_refresh'`,
   ]);
 
   const scheduled = settingRows[0]?.value ?? { enabled: false, cadence: "monthly" };
+  const sources = scheduled.sources ?? {};
   const confirmedLayouts = layouts.filter((layout) => layout.status === "confirmed").length;
 
   return (
@@ -229,10 +238,49 @@ export default async function ImportsPage() {
               <form action={setScheduledRefresh} className="space-y-3">
                 <Field label="Cadence">
                   <Select name="cadence" defaultValue={scheduled.cadence}>
+                    <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                   </Select>
                 </Field>
+
+                {/*
+                  Source URLs. With all three of a family's files set, the job
+                  downloads them itself; leave them blank and it falls back to
+                  importing a bundle somebody uploaded. A family with only some
+                  URLs is skipped rather than half-fetched, because the importer
+                  will not run a partial family.
+                */}
+                <div className="space-y-2 rounded-md border border-ink-200 p-3">
+                  <p className="text-xs font-medium text-ink-700">
+                    Source URLs — where the job downloads each file from
+                  </p>
+                  <p className="text-xs text-ink-500">
+                    Direct links only. ILSOS regenerates every file daily, and each one is a
+                    complete snapshot rather than a set of changes, so any run picks up everything.
+                  </p>
+                  {ENTITY_FAMILIES.map((family) => (
+                    <div key={family} className="space-y-1.5 pt-1">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-500">
+                        {FAMILY_LABELS[family]}
+                      </p>
+                      {FILE_KINDS.map((kind) => (
+                        <Field
+                          key={`${family}-${kind}`}
+                          label={`${EXPECTED_FILES[family][kind]}`}
+                        >
+                          <Input
+                            name={`url-${family}-${kind}`}
+                            type="url"
+                            inputMode="url"
+                            defaultValue={sources[`${family}-${kind}`] ?? ""}
+                            placeholder={`https://…/${EXPECTED_FILES[family][kind]}.zip`}
+                          />
+                        </Field>
+                      ))}
+                    </div>
+                  ))}
+                </div>
                 <label className="flex items-center gap-2 text-xs text-ink-700">
                   <input
                     type="checkbox"
@@ -248,7 +296,7 @@ export default async function ImportsPage() {
                 </Button>
               </form>
               <p className="mt-3 text-xs text-ink-500">
-                This flag alone does nothing: a Railway cron entry must also be configured to run{" "}
+                This flag alone does nothing: a Railway cron service must also be configured to run{" "}
                 <code className="font-mono">npm run refresh</code>. Both must be in place, so a
                 schedule can never start by accident. See the README.
               </p>

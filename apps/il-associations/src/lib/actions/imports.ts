@@ -14,9 +14,15 @@ import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { maxUploadBytes } from "@/lib/env";
 import { ingestSourceFile } from "@/lib/importer/ingest";
-import { FetchSourceError, fetchSourceFileToDisk } from "@/lib/importer/fetch-url";
+import {
+  assertFetchableUrl,
+  FetchSourceError,
+  fetchSourceFileToDisk,
+} from "@/lib/importer/fetch-url";
 import { runImport } from "@/lib/importer/run";
 import {
+  ENTITY_FAMILIES,
+  FILE_KINDS,
   REQUIRED_ROLES,
   SEMANTIC_ROLES,
   validateLayout,
@@ -292,16 +298,35 @@ export async function startImport(formData: FormData): Promise<void> {
   redirect(`/imports/runs/${result.importRunId}`);
 }
 
-/** Turn the optional scheduled refresh on or off. Never enabled silently. */
+/**
+ * Turn the optional scheduled refresh on or off. Never enabled silently.
+ *
+ * The source URLs live here too. With them set, the job fetches the files
+ * itself; without them it falls back to importing a bundle somebody uploaded.
+ * A family is only refreshed when all three of its files have a URL, because
+ * the importer will not run a partial family.
+ */
 export async function setScheduledRefresh(formData: FormData): Promise<void> {
   const user = await requireUser();
   const sql = getSql();
   const enabled = formData.get("enabled") === "1";
   const cadence = String(formData.get("cadence") ?? "monthly");
 
+  const sources: Record<string, string> = {};
+  for (const family of ENTITY_FAMILIES) {
+    for (const kind of FILE_KINDS) {
+      const key = `${family}-${kind}`;
+      const url = String(formData.get(`url-${key}`) ?? "").trim();
+      if (url === "") continue;
+      // Validated now rather than at 6am on a Friday.
+      await assertFetchableUrl(url);
+      sources[key] = url;
+    }
+  }
+
   await sql`
     INSERT INTO app_settings (key, value, updated_by)
-    VALUES ('scheduled_refresh', ${sql.json({ enabled, cadence } as never)}, ${user.email})
+    VALUES ('scheduled_refresh', ${sql.json({ enabled, cadence, sources } as never)}, ${user.email})
     ON CONFLICT (key) DO UPDATE SET
       value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`;
 
@@ -310,7 +335,7 @@ export async function setScheduledRefresh(formData: FormData): Promise<void> {
     action: enabled ? "settings.scheduled_refresh_enabled" : "settings.scheduled_refresh_disabled",
     entityTable: "app_settings",
     entityId: "scheduled_refresh",
-    note: cadence,
+    note: `${cadence}; ${Object.keys(sources).length} source URLs configured`,
   });
 
   revalidatePath("/imports");
