@@ -14,6 +14,7 @@ import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { maxUploadBytes } from "@/lib/env";
 import { ingestSourceFile } from "@/lib/importer/ingest";
+import { FetchSourceError, fetchSourceFileToDisk } from "@/lib/importer/fetch-url";
 import { runImport } from "@/lib/importer/run";
 import {
   REQUIRED_ROLES,
@@ -103,6 +104,69 @@ export async function uploadSourceFile(formData: FormData): Promise<void> {
       entityId: result.sourceFileId,
       note: `${family}/${fileKind}: ${file.name} (sha256 ${result.sha256.slice(0, 16)}…)`,
     });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  revalidatePath(`/imports/bundles/${bundleId}`);
+}
+
+/**
+ * Fetch a source file from a URL, server-side.
+ *
+ * The alternative to uploading hundreds of megabytes through a browser: the
+ * operator supplies a direct link and the server downloads it. Useful where the
+ * files are published, and the only workable route from a phone or a slow
+ * connection.
+ *
+ * It fetches exactly the URL given — no crawling, no link following beyond
+ * HTTP redirects, each of which is re-validated. Upload remains the primary
+ * path; this is the secondary one the brief allows.
+ */
+export async function fetchSourceFile(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  if (user.role !== "admin") {
+    throw new Error("Only an administrator can fetch a source file from a URL.");
+  }
+  const bundleId = Number(formData.get("bundleId"));
+  const family = String(formData.get("family")) as EntityFamily;
+  const fileKind = String(formData.get("fileKind")) as FileKind;
+  const runDateOverride = String(formData.get("runDate") ?? "").trim() || null;
+  const url = String(formData.get("url") ?? "").trim();
+
+  if (url === "") throw new Error("Paste the URL of the ZIP or TXT file.");
+
+  const directory = await mkdtemp(join(tmpdir(), "ilsos-fetch-"));
+  try {
+    const fetched = await fetchSourceFileToDisk({
+      url,
+      destinationDirectory: directory,
+      maxBytes: maxUploadBytes(),
+    });
+
+    const result = await ingestSourceFile({
+      bundleId,
+      family,
+      fileKind,
+      originalFilename: fetched.filename,
+      localPath: join(directory, fetched.filename),
+      actor: user.email,
+      runDateOverride,
+    });
+
+    await writeAudit({
+      actor: user.email,
+      action: "source_file.fetched",
+      entityTable: "source_files",
+      entityId: result.sourceFileId,
+      // The URL is recorded: where a file came from is part of its provenance.
+      note:
+        `${family}/${fileKind}: ${fetched.filename} from ${fetched.finalUrl} ` +
+        `(${(fetched.bytes / 1_048_576).toFixed(1)} MB, sha256 ${result.sha256.slice(0, 16)}…)`,
+    });
+  } catch (error) {
+    if (error instanceof FetchSourceError) throw new Error(error.message);
+    throw error;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

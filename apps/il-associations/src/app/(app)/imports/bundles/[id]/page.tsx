@@ -13,7 +13,12 @@ import {
   count,
 } from "@/components/ui";
 import { getSql } from "@/lib/db";
-import { removeSourceFile, startImport, uploadSourceFile } from "@/lib/actions/imports";
+import {
+  fetchSourceFile,
+  removeSourceFile,
+  startImport,
+  uploadSourceFile,
+} from "@/lib/actions/imports";
 import { LayoutEditor } from "@/components/layout-editor";
 import {
   ENTITY_FAMILIES,
@@ -188,6 +193,31 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
                           </Field>
                           <Button type="submit" size="sm" variant="secondary">
                             Upload
+                          </Button>
+                        </form>
+                      )}
+                      {file ? null : (
+                        /*
+                          The server-side alternative. These files run to tens of
+                          megabytes, which is a poor thing to push through a
+                          browser on a phone or a slow line — and the machine
+                          running the app can usually reach the publisher
+                          directly. It fetches the one URL given and nothing else.
+                        */
+                        <form action={fetchSourceFile} className="mt-3 space-y-2 border-t border-ink-200 pt-3">
+                          <input type="hidden" name="bundleId" value={bundleId} />
+                          <input type="hidden" name="family" value={family} />
+                          <input type="hidden" name="fileKind" value={kind} />
+                          <Field label="…or fetch it from a URL">
+                            <Input
+                              name="url"
+                              type="url"
+                              inputMode="url"
+                              placeholder={`https://…/${EXPECTED_FILES[family][kind]}.zip`}
+                            />
+                          </Field>
+                          <Button type="submit" size="sm" variant="ghost">
+                            Fetch
                           </Button>
                         </form>
                       )}

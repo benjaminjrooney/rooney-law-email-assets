@@ -83,6 +83,31 @@ apps/il-associations/
 **Stack.** TypeScript, Next.js (App Router), PostgreSQL, Drizzle ORM, Tailwind
 CSS with a local shadcn-style component kit, Recharts, ExcelJS.
 
+### Getting the files in
+
+Two paths, both on the bundle page.
+
+**Upload** is the primary one: choose the ZIP or TXT and it streams to storage.
+
+**Fetch from a URL** is the alternative, and it exists because these files run to
+tens of megabytes — a poor thing to push through a browser on a phone or a slow
+line, when the machine running the app can usually reach the publisher directly.
+Paste a direct link and the server downloads it. Administrators only, and the URL
+is recorded in the audit log, because where a file came from is part of its
+provenance.
+
+It is not a scraper: it fetches exactly the URL given, reads no pages and
+follows no links. HTTP redirects are followed, but by hand, so each hop is
+re-validated rather than trusted.
+
+The guard is the substance of it, since the server is making requests on an
+operator's behalf. https only; the host must resolve to a public address;
+loopback, private ranges, link-local (including the `169.254.169.254` metadata
+endpoint), carrier-grade NAT and IPv4-mapped IPv6 forms are all refused, on the
+first URL and on every redirect. The size cap is counted from the stream rather
+than read from `Content-Length`, which a server may understate or omit. See
+`test/fetch-url.test.ts`.
+
 ### The import pipeline
 
 Three restartable phases:
