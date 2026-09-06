@@ -87,13 +87,14 @@ export default async function ImportsPage() {
           description={`${confirmedLayouts} of ${layouts.length} confirmed. The importer will not write with an unconfirmed layout.`}
         />
         <CardBody className="space-y-3">
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            <strong className="font-semibold">This build ships no field positions.</strong> The
-            official ILSOS record-layout documentation could not be retrieved when the application
-            was built, and guessing column positions is not acceptable for this data. Transcribe the
-            layout for each file from the official documentation on the bundle page; the importer
-            shows you inferred column boundaries from your own file as a cross-check, and refuses to
-            run in write mode until you confirm.
+          <div className="rounded-md border border-accent-300 bg-accent-50 px-3 py-2 text-xs text-ink-800">
+            <strong className="font-semibold">Field positions come from the official ILSOS
+            documentation.</strong>{" "}
+            Every layout below is transcribed from “Procedures to Access Corp Data” or “Procedures to
+            Access LL Data”, both v004 (2024-04-04), and cites the document it came from. Nothing
+            here was inferred from a file. You can still edit any layout on the bundle page — the
+            importer shows the column boundaries observed in your own file as a cross-check, and
+            refuses to run in write mode against a layout that is not confirmed.
           </div>
           <Table>
             <thead className="bg-ink-50">
