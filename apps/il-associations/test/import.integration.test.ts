@@ -312,6 +312,53 @@ describeIfDb("import pipeline against Postgres", () => {
     expect(row!.n).toBeGreaterThanOrEqual(4);
   });
 
+  it("counts agent and master records the name file never mentions", async () => {
+    /*
+     * The unmatched count runs in its own transaction now, because on a real
+     * family it needs more work_mem than the default or it writes the count
+     * out to the volume and fills it. Restructuring a query is a chance to
+     * change its answer, so this pins the answer.
+     */
+    const { buildRoster } = await import("@/lib/importer/pipeline");
+    const [run] = await sql<{ id: number }[]>`
+      INSERT INTO import_runs (bundle_id, rule_set_id, mode, status, phase, bundle_digest)
+      SELECT (SELECT id FROM source_bundles ORDER BY id LIMIT 1),
+             (SELECT id FROM inclusion_rule_sets ORDER BY id LIMIT 1),
+             'preview', 'running', 'building', 'unmatched-test'
+      RETURNING id`;
+    const runId = run!.id;
+
+    // Two entities named in the Name file, plus two file numbers that appear
+    // only as an agent and a master record — the case being counted.
+    const insert = (kind: string, fileNumber: string, n: number) => sql`
+      INSERT INTO staging_records (import_run_id, family, file_kind, file_number, record_number, payload, record_hash)
+      VALUES (${runId}, 'llc', ${kind}, ${fileNumber}, ${n}, '{}'::jsonb, ${`${kind}-${fileNumber}`})`;
+    await insert("name", "00000001", 1);
+    await insert("name", "00000002", 2);
+    await insert("agent", "00000001", 1);
+    await insert("agent", "00009999", 2);
+    await insert("master", "00000002", 1);
+    await insert("master", "00008888", 2);
+
+    const ruleSet = await sql<{ id: number; rules: unknown }[]>`
+      SELECT id, rules FROM inclusion_rule_sets ORDER BY id LIMIT 1`;
+    const result = await buildRoster(sql, {
+      importRunId: runId,
+      bundleId: 1,
+      ruleSetId: ruleSet[0]!.id,
+      ruleSetRules: { version: 1, name: "t", notes: "", rules: ruleSet[0]!.rules as never },
+      family: "llc",
+      sourceRunDate: "2026-01-01",
+      mode: "preview",
+    });
+
+    // 9999 and 8888 only; 0001 and 0002 both appear in the Name file.
+    expect(result.counts.unmatched).toBe(2);
+
+    await sql`DELETE FROM staging_records WHERE import_run_id = ${runId}`;
+    await sql`DELETE FROM import_runs WHERE id = ${runId}`;
+  });
+
   it("clears staging once the roster is built", async () => {
     const [row] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM staging_records`;
     expect(row!.n).toBe(0);

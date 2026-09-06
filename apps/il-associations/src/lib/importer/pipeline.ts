@@ -474,18 +474,42 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
   const agentCache = new Map<string, number>();
   const { importRunId, family, mode } = options;
 
-  // Agent or Master records whose file number never appears in the Name file.
-  const [unmatched] = await sql<{ n: number }[]>`
-    SELECT count(DISTINCT s.file_number)::int AS n
-    FROM staging_records s
-    WHERE s.import_run_id = ${importRunId}
-      AND s.family = ${family}
-      AND s.file_kind <> 'name'
-      AND NOT EXISTS (
-        SELECT 1 FROM staging_records n
-        WHERE n.import_run_id = ${importRunId} AND n.family = ${family}
-          AND n.file_kind = 'name' AND n.file_number = s.file_number)`;
-  counts.unmatched = unmatched?.n ?? 0;
+  /*
+   * Agent or Master records whose file number never appears in the Name file.
+   *
+   * Counting distinct values across a family's four million agent and master
+   * rows needs somewhere to put them, and on the default 4 MB work_mem
+   * Postgres puts them on the volume. That is what killed the corporation
+   * family: the run reached this line and then
+   *
+   *   could not write to file "base/pgsql_tmp/…/o2of16.p0.0":
+   *   No space left on device
+   *
+   * with the staged family already occupying most of a 5 GB disk. The temp
+   * file name says a parallel hash join in sixteen batches, so both settings
+   * below matter: room to do the work in memory, and one worker rather than
+   * several each spilling their own batches. Measured against a seeded 6.3
+   * million row family, this takes the query from 178 MB of temp files to
+   * none, in the same two seconds.
+   *
+   * SET LOCAL, so it lasts exactly as long as this transaction and never
+   * becomes a standing allocation on a pooled connection.
+   */
+  counts.unmatched = await sql.begin(async (tx) => {
+    await tx`SET LOCAL work_mem = '256MB'`;
+    await tx`SET LOCAL max_parallel_workers_per_gather = 0`;
+    const [row] = await tx<{ n: number }[]>`
+      SELECT count(DISTINCT s.file_number)::int AS n
+      FROM staging_records s
+      WHERE s.import_run_id = ${importRunId}
+        AND s.family = ${family}
+        AND s.file_kind <> 'name'
+        AND NOT EXISTS (
+          SELECT 1 FROM staging_records n
+          WHERE n.import_run_id = ${importRunId} AND n.family = ${family}
+            AND n.file_kind = 'name' AND n.file_number = s.file_number)`;
+    return row?.n ?? 0;
+  });
 
   let pending: Candidate[] = [];
   let multipleNameRecords = 0;
