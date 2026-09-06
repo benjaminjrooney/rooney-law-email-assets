@@ -932,7 +932,29 @@ export async function clearStaging(sql: Sql, importRunId: number): Promise<void>
  * happens after the last family.
  */
 async function reclaimStaging(sql: Sql): Promise<void> {
-  await sql`VACUUM staging_records`;
+  try {
+    /*
+     * PARALLEL 0 because the parallel path asks for a 64 MB dynamic shared
+     * memory segment and the database container's /dev/shm is 64 MB exactly:
+     *
+     *   could not resize shared memory segment "/PostgreSQL.2486982860"
+     *   to 67129248 bytes: No space left on device
+     *
+     * which reads as the volume filling again and is nothing of the kind.
+     * Vacuuming the indexes serially is slower and entirely sufficient.
+     */
+    await sql`VACUUM (PARALLEL 0) staging_records`;
+  } catch (error) {
+    /*
+     * Housekeeping, so it does not get to fail the run. What it costs is disk
+     * on the next family, and a run that then genuinely runs out says so; a
+     * family that imported correctly should not be thrown away over a vacuum.
+     */
+    console.error(
+      "Could not vacuum staging_records:",
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 /**
