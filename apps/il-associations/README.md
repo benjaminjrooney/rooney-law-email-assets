@@ -435,17 +435,27 @@ root:
    | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | your bucket |
    | `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | for S3-compatible providers |
 
-   Do **not** set `NODE_ENV=production` as a service variable. `npm ci` honours
-   it and omits devDependencies, so Tailwind's PostCSS plugin and TypeScript go
-   missing and `next build` fails. Nothing needs it: `next start` sets NODE_ENV
-   itself at runtime, and the session cookie's `Secure` flag is decided by
-   `APP_URL` being https (see `secureCookies()` in `src/lib/env.ts`).
+   **The build does not depend on devDependencies.** Railway's service carries
+   `NODE_ENV=production`, which makes `npm ci` omit them, and that broke three
+   deploys with `Cannot find module '@tailwindcss/postcss'`. Rather than rely on
+   a dashboard variable staying deleted, everything `next build` itself needs —
+   the Tailwind PostCSS plugin, Tailwind, TypeScript and the `@types` packages —
+   sits in `dependencies`. ESLint, Vitest and drizzle-kit stay dev-only.
 
-   The build script empties `.next/cache` first. Turbopack's persistent cache is
-   a shared cache mount on Railway and it can replay an old failure: one build
-   genuinely broken by a missing devDependency kept failing two later commits
-   that were fine, with the same error in three seconds and no recompile.
-   Clearing the cache and changing nothing else made the same commit build. A
+   That is verifiable rather than hopeful: `npm ci` with dev dependencies
+   omitted, then `npm run build`, succeeds. It also means `next build` must not
+   typecheck files that import Vitest or drizzle-kit, so `tsconfig.json` covers
+   the shipped app and `tsconfig.tools.json` covers the tests, the Vitest config
+   and the Drizzle config. `npm run typecheck` runs both, so nothing stops being
+   checked.
+
+   The session cookie's `Secure` flag does not depend on NODE_ENV either — it is
+   decided by `APP_URL` being https, via `secureCookies()` in `src/lib/env.ts`.
+
+   The build script also empties `.next/cache` first. Turbopack's persistent
+   cache is a shared cache mount on Railway and it replayed one genuine failure
+   against a later commit that was fine, in three seconds with no recompile;
+   clearing the cache and changing nothing else made that same commit build. A
    cold compile takes about six seconds, so the cache was not buying much.
 
    Object storage is not optional in production: Railway's container
