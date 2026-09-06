@@ -59,23 +59,23 @@ on, never inside the document.
 intentionally public so email recipients can retrieve the logo when messages are
 received.
 
-### This copy is being retired, and must not be deleted
+### Nothing found in use points at this file
 
-As of 6 September 2026 the firm's website is live and serves the same image at
+Checked 6 September 2026. Ben's Outlook signature embeds its logo as an inline
+attachment (`Outlook-Rooney Law.png`, 21,693 bytes) rather than fetching a hosted
+URL. No message in the mailbox references `raw.githubusercontent.com` or this
+filename, and no code in this repository references it either.
+
+The firm's website, live since 6 September 2026, serves a copy of the same wordmark
+at
 
     https://rooneylawpc.com/.well-known/rooney-law-email-logo.png
 
-That is the URL the Brand Guide names and the one the Exchange signature rule
-should point at. Two hosted copies of one logo is how the wrong one ends up in a
-signature, so this one stops being referenced.
+That is the URL the Brand Guide names, on a domain the firm controls, and it is the
+right target if a hosted logo is ever wanted. It is byte identical to this file.
 
-**Stops being referenced, not deleted.** A mail client fetches the image when the
-recipient opens the message, including messages sent months ago. Removing this
-file breaks the logo in every email the firm has already sent. Leave it here.
-
-The two files are byte identical, so the switch changes nothing visually. Once the
-Exchange rule is changed, new mail pulls from `rooneylawpc.com` and old mail keeps
-pulling from here, and both show the same wordmark.
+Leave this file in place regardless. It costs nothing, and not finding a reference
+in the mailbox and this repository is not proof there is none elsewhere.
 
 If the signature is ever pointed back at this file, reference the direct raw HTTPS
 file URL, not the GitHub page URL, and do not rename or move the PNG without

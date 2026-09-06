@@ -9,20 +9,34 @@
 Two unrelated things: the Word add-in that mails letters through Lob, and the public
 email-signature wordmark. See `README.md`.
 
-`rooney-law-wordmark-email-480w.png` is intentionally public so email recipients can
-retrieve the logo.
+`rooney-law-wordmark-email-480w.png` is a public copy of the Rooney Law wordmark.
 
-**That question is settled.** The firm's website went live on 6 September 2026 and
-serves the same image, byte for byte, at
-`https://rooneylawpc.com/.well-known/rooney-law-email-logo.png`. That is the URL the
-Brand Guide names, it is on a domain the firm controls, and the site caches
-`/.well-known/` for an hour rather than a year so that replacing the logo actually
-reaches sent signatures. The Exchange signature rule points there. This copy is retired.
+## What actually uses this file: nothing that has been found
 
-**Retired does not mean deleted. Never delete this file.** A mail client fetches the
-image when the recipient opens the message, including mail sent long ago, so removing it
-breaks the logo in every email the firm has already sent. It stops being referenced; it
-does not stop existing. Do not rename or move it either.
+Checked on 6 September 2026, because both this file and `README.md` previously stated
+that the firm's email signature points at it. The evidence says otherwise:
+
+- Ben's Outlook signature does **not** reference a hosted URL. It carries the logo as an
+  inline attachment, `Outlook-Rooney Law.png`, 21,693 bytes, embedded in each message.
+  That is a different derivative again: it matches neither this file (12,074 bytes) nor
+  any copy in the website repository.
+- No message in the mailbox references `raw.githubusercontent.com` or this filename.
+  Both searches returned nothing.
+- Nothing in this repository's code references it. Only the prose describing it did.
+
+So there is no "central Exchange signature rule" pointing here, and there may be no
+central signature rule at all. The earlier note describing one appears to record an
+intention rather than a configuration.
+
+**What this changes.** The claim that deleting this file would break the logo in already
+sent mail was wrong: those messages embed their own copy and fetch nothing. That said,
+leave the file alone. Its cost is nothing, and "no reference found in the mailbox and
+the repository" is not the same as "no reference anywhere": a Word add-in template, a
+third-party signature tool, or an older mobile signature could still point at it, and
+none of those is visible from here.
+
+**Do not treat any of this as settled without asking Ben.** He is the one who knows
+whether a signature service exists.
 
 Related: the firm's website lives at `benjaminjrooney/rooney-law-website`. Its
 `STATUS.md` is the current state of that project.
