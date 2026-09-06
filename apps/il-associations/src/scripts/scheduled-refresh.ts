@@ -7,6 +7,7 @@ import { runImport, ImportPreconditionError } from "@/lib/importer/run";
 import { fetchSourceFileToDisk } from "@/lib/importer/fetch-url";
 import { ingestSourceFile } from "@/lib/importer/ingest";
 import { ENTITY_FAMILIES, FILE_KINDS, type EntityFamily } from "@/lib/ilsos/layout";
+import { alertChannels, alertRefreshFailure } from "@/lib/alerts";
 
 type Sources = Partial<Record<string, string>>;
 
@@ -189,13 +190,26 @@ async function importBundle(bundleId: number, label: string): Promise<void> {
   }
 }
 
+const channels = alertChannels();
+console.log(
+  channels.length > 0
+    ? `Failures will be reported via ${channels.join(" and ")}.`
+    : "Failures will not be reported to anyone; see ALERT_WEBHOOK_URL in the README.",
+);
+
 main()
-  .catch((error: unknown) => {
+  .catch(async (error: unknown) => {
     if (error instanceof ImportPreconditionError) {
       console.error(`Scheduled refresh could not run: ${error.message}`);
     } else {
       console.error(error);
     }
+    /*
+     * Nobody is watching a Friday morning. The alert comes after the error has
+     * been logged and cannot replace it: if alerting itself fails, that is
+     * reported alongside rather than instead.
+     */
+    await alertRefreshFailure(error);
     process.exitCode = 1;
   })
   .finally(() => closeDb());

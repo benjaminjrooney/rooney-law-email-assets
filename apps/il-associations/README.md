@@ -158,6 +158,28 @@ cleverer import.
 A build reports each of its stages with a duration, so a slow run says where
 the time went rather than sitting silent under one "[building]" line.
 
+### Being told when it fails
+
+The weekly job runs on a Friday morning with nobody watching, and a failed run
+is quiet by nature: the roster keeps its last good data, so the only symptom is
+that the numbers stop moving. Set one of these and a failure reaches you.
+
+| Variable | What it does |
+|---|---|
+| `ALERT_WEBHOOK_URL` | An https endpoint gets a JSON POST. A Teams or Slack incoming webhook is the least work; the payload's `text` field is what both render. |
+| `ALERT_RESEND_API_KEY` | With `ALERT_EMAIL_TO` (and optionally `ALERT_EMAIL_FROM`), sends email through Resend. |
+
+Set them on the **refresh** service. Both can be on; neither is required, and
+with neither the run says so at startup and again if it fails, because an
+alerter that is quiet about being unconfigured would be the same bug again.
+
+Configuration URLs go through the same guard as import URLs, so a webhook
+cannot be pointed at the container's own network.
+
+What this does not cover: a run that never starts. If the cron itself stops
+firing there is nothing to report the failure, and the symptom is again that
+the numbers stop moving. Worth knowing about rather than assuming covered.
+
 ### When the volume is full
 
 An import that dies part way used to leave every staged row behind, and staging
