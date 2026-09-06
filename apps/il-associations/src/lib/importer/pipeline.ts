@@ -15,6 +15,7 @@ import {
   type FileKind,
   type RecordLayout,
 } from "@/lib/ilsos/layout";
+import { resolveStatus } from "@/lib/ilsos/status-codes";
 import { extractFields, readRecords } from "@/lib/ilsos/parser";
 import { openSourceStream, type ContainerFormat } from "@/lib/ilsos/archive";
 import { UNMAPPED_STATUS_LABEL } from "@/lib/db/schema";
@@ -544,7 +545,15 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
         continue;
       }
       if (candidate.hasMultipleNameRecords) multipleNameRecords += 1;
-      if (candidate.statusCodeRaw !== null) unmappedStatusCodes += 1;
+      // Only codes the documented table does not recognise; a corporation
+      // status now resolves, so counting every non-null code would report a
+      // gap that no longer exists.
+      if (
+        candidate.statusCodeRaw !== null &&
+        !resolveStatus(candidate.entityFamily, candidate.statusCodeRaw).isMapped
+      ) {
+        unmappedStatusCodes += 1;
+      }
       pending.push(candidate);
     }
 
@@ -631,7 +640,9 @@ async function persistBatch(
 
   if (options.mode === "preview") return;
 
-  const row = (candidate: Candidate) => ({
+  const row = (candidate: Candidate) => {
+    const status = resolveStatus(candidate.entityFamily, candidate.statusCodeRaw);
+    return {
     file_number: candidate.fileNumber,
     entity_family: candidate.entityFamily,
     legal_name: candidate.legalName,
@@ -659,8 +670,14 @@ async function persistBatch(
     effective_date: candidate.effectiveDate,
     extended_date: candidate.extendedDate,
     status_code_raw: candidate.statusCodeRaw,
-    status_label: UNMAPPED_STATUS_LABEL,
-    status_is_mapped: false,
+    /*
+     * Resolved against the documented code table for the family. Corporation
+     * codes come from "Procedures to Access Corp Data"; LLC codes have no
+     * documented table yet, so an LLC still reports UNMAPPED_STATUS_LABEL
+     * rather than borrowing the corporation meanings.
+     */
+    status_label: status.label,
+    status_is_mapped: status.isMapped,
     source_bundle_id: options.bundleId,
     source_run_date: options.sourceRunDate,
     record_hash: candidate.recordHash,
@@ -669,7 +686,8 @@ async function persistBatch(
     last_import_run_id: options.importRunId,
     is_current: true,
     archived_at: null,
-  });
+    };
+  };
 
   await sql.begin(async (tx) => {
     if (toInsert.length > 0) {

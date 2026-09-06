@@ -13,28 +13,34 @@ authentication.
 
 ## Read this first: what this build cannot tell you
 
-Two limits are designed into the app rather than papered over.
+**1. Two of the six record layouts still need you.** The corporation layouts are
+transcribed from the official ILSOS documentation — "Procedures to Access Corp
+Data", v004 (2024-04-04) — field by field, including its COBOL names, and are
+seeded `confirmed` with that citation. The LLC **Name** layout is seeded from
+observation: all 1,494,050 records of a real `llcallnam.txt`, with a citation
+that says exactly that rather than claiming documentation.
 
-**1. Five of the six record layouts still need you.** The official ILSOS
-record-layout documentation could not be retrieved when the application was
-built (`www.ilsos.gov` was unreachable from the build environment). The brief
-is explicit that field definitions must never be invented, so they aren't.
-Layouts are operator-owned data: the import wizard shows you the column
-boundaries it can *observe* in your own file, you transcribe the real positions
-from the official documentation, cite it, and confirm. **The importer refuses to
-run in write mode against an unconfirmed layout.** See
-[`layouts/README.md`](layouts/README.md).
+**`llc/agent` and `llc/master` remain unconfirmed.** Their record layout is a
+separate publication —
+[Procedures to Access LLC Data](https://www.ilsos.gov/content/dam/data/bs/proc_llc_data.pdf)
+— that this build has not seen. The brief is explicit that field definitions
+must never be invented, so they aren't: **the importer refuses to run in write
+mode against an unconfirmed layout.** Transcribe them in the import wizard, with
+the observed column boundaries beside you as a cross-check, or hand the PDF to
+whoever is maintaining this and they can be seeded the same way the corporation
+ones were. See [`layouts/README.md`](layouts/README.md).
 
-The exception is the **LLC Name** file, which this build has actually seen. Its
-layout is seeded as confirmed, and its citation says plainly that it was derived
-from 1,494,050 real records rather than transcribed from documentation. You can
-re-edit it like any other.
+**2. Corporation status is mapped; LLC status is not.** All eighteen corporation
+status codes (00 Goodstanding through 17 Ag-Coop) come from data element 41006 of
+the same document, and **Active-only works for corporations** — using the
+Secretary of State's own definition of good standing, `CORP-STATUS < 3`, which is
+codes 00, 01 and 02.
 
-**2. Entity status is unmapped.** No documented status-code list was available,
-so status codes are retained verbatim and displayed as
-*"Source code not yet mapped."* The **Active-only** filter is present but
-disabled until a mapping exists — filtering on a code nobody has established
-would quietly drop real associations.
+An LLC status still reads *"Source code not yet mapped."* The corporation table
+is deliberately **not** borrowed for it: the LLC codes are published separately
+and are not assumed to match. An unrecognised corporation code is also reported
+unmapped rather than guessed at, in case the file carries one added after the
+revision transcribed here.
 
 Two further caveats are stated throughout the UI and in every export, because
 they matter to how the numbers should be read:
