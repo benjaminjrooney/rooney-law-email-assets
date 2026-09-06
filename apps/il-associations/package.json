@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "configure:refresh": "tsx src/scripts/configure-refresh.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
