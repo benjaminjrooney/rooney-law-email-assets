@@ -4,40 +4,75 @@
   /*
    * Rooney Law palette.
    *
-   * The ink and accent are sampled from the firm wordmark itself
-   * (rooney-law-wordmark-email-480w.png), not chosen by eye:
-   *   #2C3A47 — the wordmark lettering
-   *   #1F2E3C — its deepest shade
-   *   #97B4B5 — the divider rule and tagline
-   * The neutral ramp is built around that same hue so greys sit with the mark
-   * rather than fighting it.
+   * Five values are the firm's, taken verbatim from `brand.json` in the Rooney
+   * Law Brand Kit, which the Brand Guide names as the single source of truth:
+   *
+   *   Charcoal  #2C3A47   primary dark field, body type, framing
+   *   Teal      #4A7C7E   accent, divider rules, eyebrow labels
+   *   Ivory     #F8F6F2   light field, reversed type on charcoal
+   *   Slate     #69737C   secondary and supporting type
+   *   Rule      #8F999F   hairlines and table rules
+   *
+   * Those five are marked "brand" below and must not be adjusted here — change
+   * them in brand.json. Every other step is a tint or shade derived from the
+   * same two hues so a UI ramp exists at all; the Brand Guide does not specify
+   * one. Derived steps are marked and carry their measured contrast.
+   *
+   * "Teal is an accent. When a piece starts to look teal, it has too much."
    */
-  --color-ink-50: oklch(0.985 0.003 235);
-  --color-ink-100: oklch(0.966 0.005 235);
-  --color-ink-200: oklch(0.924 0.008 235);
-  --color-ink-300: oklch(0.868 0.012 235);
-  --color-ink-400: oklch(0.702 0.018 235);
-  --color-ink-500: oklch(0.558 0.022 235);
-  --color-ink-600: oklch(0.452 0.026 235);
-  --color-ink-700: oklch(0.372 0.029 235);
-  /* #2C3A47 — the wordmark ink. */
-  --color-ink-800: oklch(0.334 0.031 244);
-  /* #1F2E3C — the wordmark's deepest shade. */
-  --color-ink-900: oklch(0.281 0.032 246);
+
+  /* --- Ink: the charcoal family, plus the two brand neutrals ------------- */
+
+  /* brand — Ivory. The page ground; cards sit on it in white. */
+  --color-ink-50: oklch(0.9736 0.0057 84.6);
+  /* derived — a half-step down from ivory for hover fills. */
+  --color-ink-100: oklch(0.945 0.006 84.6);
+  /* derived — the subtle hairline. 1.30:1 on white, a border not a mark. */
+  --color-ink-200: oklch(0.912 0.008 240);
+  /* brand — Rule. The stronger border, on inputs and button rings. */
+  --color-ink-300: oklch(0.6768 0.0145 233.9);
+  /* derived — muted glyphs and disabled type. 3.52:1 on white. */
+  --color-ink-400: oklch(0.628 0.016 240);
+  /* brand — Slate. Secondary type: 4.83:1 on white, 4.48:1 on ivory. */
+  --color-ink-500: oklch(0.5502 0.0185 245.3);
+  /* derived — 6.57:1 on white. */
+  --color-ink-600: oklch(0.478 0.024 244);
+  /* derived — 9.02:1 on white. */
+  --color-ink-700: oklch(0.404 0.027 245);
+  /* derived — 10.31:1 on white. */
+  --color-ink-800: oklch(0.372 0.029 246);
+  /* brand — Charcoal. Body type and headings: 11.65:1 on white. */
+  --color-ink-900: oklch(0.3416 0.0295 246.8);
+
+  /* --- Accent: the teal family ------------------------------------------ */
+
+  /* derived tints — backgrounds only, never type. */
+  --color-accent-50: oklch(0.968 0.010 199);
+  --color-accent-100: oklch(0.936 0.020 199);
+  --color-accent-300: oklch(0.800 0.038 199);
+  /* derived — the second chart series. 3.32:1 on white, clears a mark's 3:1. */
+  --color-accent-500: oklch(0.638 0.050 199);
+  /* brand — Teal. Rules, chart bars, accents. 4.69:1 on white. */
+  --color-accent-600: oklch(0.5519 0.0540 199.0);
+  /*
+   * derived — interactive type. Brand teal measures 4.35:1 on ivory, just
+   * under the 4.5:1 small text needs, so links and buttons take this darker
+   * step instead: 6.65:1 on white, 6.17:1 on ivory. The mark itself is never
+   * drawn in it.
+   */
+  --color-accent-700: oklch(0.470 0.052 199);
+
+  /* --- Type ------------------------------------------------------------- */
 
   /*
-   * The accent is the sage from the wordmark's divider and tagline. The two
-   * darker steps are extensions of that hue, stepped down for use as
-   * interactive colour where the light sage would not carry enough contrast
-   * against white.
+   * Noto Serif for display, Inter for body, per the Typography Specification.
+   * Both are SIL Open Font License, which is why the firm chose them: free to
+   * embed and to install anywhere. The fallbacks are the Office-safe pair the
+   * same document names, so a machine without them degrades the way the firm's
+   * Word templates do rather than to whatever the browser picks.
    */
-  --color-accent-50: oklch(0.966 0.014 190);
-  --color-accent-100: oklch(0.924 0.026 190);
-  /* #97B4B5 — as it appears in the mark. */
-  --color-accent-300: oklch(0.752 0.033 195);
-  --color-accent-500: oklch(0.564 0.048 197);
-  --color-accent-600: oklch(0.492 0.052 198);
-  --color-accent-700: oklch(0.416 0.049 199);
+  --font-display: var(--font-noto-serif), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
 }
 
 html,
@@ -48,6 +83,7 @@ body {
 body {
   background-color: var(--color-ink-50);
   color: var(--color-ink-900);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 

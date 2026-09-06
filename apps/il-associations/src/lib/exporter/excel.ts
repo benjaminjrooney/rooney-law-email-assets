@@ -28,11 +28,12 @@ import { assignSheetNames, segmentAgents, type SheetAssignment } from "./sheetna
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
   pattern: "solid",
-  // The wordmark ink, so an exported workbook looks like the firm's.
+  // Brand — Charcoal, from brand.json. Header rows read as ivory on charcoal,
+  // which is the firm's reversed pairing and measures 10.79:1.
   fgColor: { argb: "FF2C3A47" },
 };
 
-const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFF8F6F2" }, size: 10 };
 
 type Column = { header: string; key: string; width: number };
 
@@ -430,7 +431,8 @@ function writeAgentMarketShare(
           priority: 1,
           minLength: 0,
           maxLength: 100,
-          color: { argb: "FF3F7F82" },
+          // Brand — Teal.
+          color: { argb: "FF4A7C7E" },
           gradient: true,
           // `cfvo` is required: the renderer iterates it to emit the bar's
           // endpoints, and omitting it throws at commit time.

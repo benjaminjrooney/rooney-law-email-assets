@@ -20,19 +20,25 @@ import {
  * entirely and keeps the charts legible in print and in forced-colours mode.
  * A table of the same figures sits beside or beneath each chart.
  *
- * Palette: the firm's teal, stepped down from the wordmark's sage so it carries
- * enough weight against a white surface. It clears the lightness band and 3:1
- * contrast. It sits under the categorical chroma floor, which is deliberate and
- * fine here: that floor exists so several series stay distinguishable from one
- * another, and these charts have one series whose identity comes from the axis
- * label. A muted teal is also simply what this brand is — saturating it enough
- * to clear a floor that does not apply would just make it the wrong colour.
+ * Palette: the firm's teal, #4A7C7E, verbatim from the Brand Kit. Measured, it
+ * is 4.69:1 on white, well clear of the 3:1 a chart mark needs. The muted step
+ * for the "no agent record" bucket is a derived tint of the same hue at 3.32:1,
+ * which still clears 3:1 rather than fading to a bar nobody can see.
+ *
+ * Brand teal sits under the categorical chroma floor. That is deliberate and
+ * correct here: the floor exists so several series stay distinguishable from
+ * one another, and these charts have one series whose identity comes from its
+ * axis label. Saturating the firm's colour to clear a check that does not apply
+ * would just make it the wrong colour, and the Brand Guide forbids recolouring.
  */
-
-const SERIES = "#3F7F82";
-const SERIES_MUTED = "#B9CFD0";
-const GRID = "#E4E8EA";
-const TEXT_SECONDARY = "#4A5763";
+/* Brand — Teal, from brand.json. */
+const SERIES = "#4A7C7E";
+/* Derived tint of the same hue (accent-500). */
+const SERIES_MUTED = "#679597";
+/* ink-200, the subtle hairline. */
+const GRID = "#DDE3E7";
+/* Brand — Slate, the firm's secondary type colour. */
+const TEXT_SECONDARY = "#69737C";
 
 export type BarDatum = {
   label: string;
@@ -106,7 +112,7 @@ export function HorizontalBars({
         />
         <Tooltip
           content={<ChartTooltip />}
-          cursor={{ fill: "rgba(63,127,130,0.07)" }}
+          cursor={{ fill: "rgba(74,124,126,0.07)" }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false}>
           {data.map((datum) => (

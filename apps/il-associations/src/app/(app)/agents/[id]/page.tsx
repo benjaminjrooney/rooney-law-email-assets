@@ -55,7 +55,7 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
         <Link href="/agents" className="text-xs text-accent-700 hover:underline">
           ← Registered agents
         </Link>
-        <h1 className="mt-1 text-xl font-semibold text-ink-900">{organization.display_name}</h1>
+        <h1 className="mt-1 font-display text-xl font-normal text-ink-900">{organization.display_name}</h1>
         <p className="mt-1 font-mono text-xs text-ink-500">{organization.grouping_key}</p>
         {organization.merged_into_id ? (
           <Badge tone="warn" className="mt-2">

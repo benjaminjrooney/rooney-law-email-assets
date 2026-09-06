@@ -305,13 +305,55 @@ active administrator cannot be deactivated, demoted or locked out.
 
 ### Branding
 
-The palette is taken from the firm wordmark rather than chosen by eye —
-`#2C3A47` (the lettering), `#1F2E3C` (its deepest shade) and `#97B4B5` (the
-divider and tagline). `src/assets/rooney-law-wordmark.png` is a copy of the
-published email wordmark. It has an **opaque white background**, so it can only
-sit on a white surface; a transparent PNG or an SVG would let it be placed
-anywhere, and a stacked or tagline-free variant would suit the narrow sidebar
-better than the wide horizontal lockup.
+Everything here comes from the **Rooney Law Brand Kit** in OneDrive
+(`Rooney Law/Rooney Law Brand Kit/`), which its own Brand Guide names as
+authoritative. `brand.json` there is the single source of truth for colour and
+type; this app follows it rather than restating it.
+
+**Colour.** The five brand values are used verbatim and marked `brand` in
+`src/app/globals.css`:
+
+| | Hex | Where it lands |
+|---|---|---|
+| Charcoal | `#2C3A47` | `ink-900` — body type, headings, the sidebar band |
+| Teal | `#4A7C7E` | `accent-600` — rules, chart bars, the teal detail |
+| Ivory | `#F8F6F2` | `ink-50` — the page ground, reversed type on charcoal |
+| Slate | `#69737C` | `ink-500` — secondary type |
+| Rule | `#8F999F` | `ink-300` — input borders and button rings |
+
+The Brand Guide specifies no UI ramp, so the remaining steps are tints and
+shades of the same two hues, each marked `derived` and carrying its measured
+contrast. Two measurements drive real decisions: teal is 4.35:1 on ivory, under
+the 4.5:1 small text needs, so links and buttons use a darker derived step at
+6.65:1; and teal on charcoal is 2.48:1, which is why the sidebar's teal appears
+only as a rule and never as type. Both figures reproduce the Brand Guide's own.
+
+**Type.** Noto Serif for display, Inter for body, per the Typography
+Specification, with Georgia and Arial as the fallbacks that document names.
+`next/font` fetches them at build time and serves them from this origin, so no
+request leaves the browser for a font.
+
+**The mark.** `src/assets/rooney-law-wordmark.png` is
+`rooney-law-wordmark-light-source.png`, the master with an opaque white ground.
+It appears once, on the login card, at **240px** — the Brand Guide's stated
+screen minimum for the lockup with the tagline — inside the required clear space
+of 1/12 of its width.
+
+It is deliberately **not** in the sidebar. That column is 240px wide, which
+leaves no room for the mark plus its clear space, and the guide is explicit that
+the wordmark is never set below its minimum. The sidebar uses the firm's
+approved cross-channel framework instead — a charcoal band, an ivory editorial
+heading, a teal detail — which is type rather than the mark.
+
+**Approved assets this repository still needs.** All four are small and live in
+the Brand Kit; dropping them into `src/assets/` is the only step left:
+
+| File | Brand Kit path | What it fixes |
+|---|---|---|
+| Transparent wordmark | `Logos/Rooney Law Wordmark Transparent.png` | The mark could then sit on the ivory field instead of being confined to a white card |
+| Compact mark | `Logos/email-logo.png` | `ROONEY \| Law, P.C.` without the tagline, minimum 120px — the right mark for the sidebar, at 176px |
+| Square monogram | `Logos/Web Icons/rooney-law-favicon-dark-*.png` | Replaces the placeholder `src/app/icon.svg`, which is a plain letterform because the guide forbids redrawing the letterforms |
+| Reversed wordmark | `Logos/Rooney Law Wordmark Reversed Transparent.png` | For anything set on charcoal |
 
 ---
 

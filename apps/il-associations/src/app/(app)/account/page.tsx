@@ -19,7 +19,7 @@ export default async function AccountPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <h1 className="text-xl font-semibold text-ink-900">Your account</h1>
+      <h1 className="font-display text-xl font-normal text-ink-900">Your account</h1>
 
       <Card>
         <CardHeader title="Details" />

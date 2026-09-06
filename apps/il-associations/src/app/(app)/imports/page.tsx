@@ -79,7 +79,7 @@ export default async function ImportsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-semibold text-ink-900">Imports and updates</h1>
+      <h1 className="font-display text-xl font-normal text-ink-900">Imports and updates</h1>
 
       <Card>
         <CardHeader

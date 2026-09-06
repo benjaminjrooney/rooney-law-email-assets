@@ -38,17 +38,32 @@ export default async function LoginPage({
       <div className="w-full max-w-sm">
         <Card>
           {/*
-            The wordmark lives inside the card because the supplied PNG has an
-            opaque white background — on the tinted page behind it, it would
-            show as a pale rectangle. A transparent PNG or an SVG would let it
-            sit anywhere.
+            Wordmark placement, per the Brand Guide.
+
+            Width is 240px because that is the stated screen minimum for the
+            lockup with the tagline; the tagline is 2.6% of the mark's width and
+            turns to grey mush below it. The padding gives the required clear
+            space of 1/12 of the mark's width — 20px at this size — on all four
+            sides, which nothing else may enter.
+
+            The mark sits on white because the file we hold is
+            `rooney-law-wordmark-light-source.png`, the master with an opaque
+            white ground. The Brand Guide's default is
+            `Logos/Rooney Law Wordmark Transparent.png`; drop that in and this
+            can sit on the ivory field instead.
           */}
-          <div className="flex flex-col items-center border-b border-ink-200 px-6 pb-5 pt-7 text-center">
-            <Image src={wordmark} alt="Rooney Law, P.C." priority className="h-auto w-[236px]" />
-            <h1 className="mt-5 text-sm font-semibold text-ink-900">
+          <div className="flex flex-col items-center border-b border-ink-200 bg-white px-5 pb-5 pt-5 text-center">
+            <Image
+              src={wordmark}
+              alt="Rooney Law, P.C. — Practical Counsel. Exceptional Results."
+              priority
+              sizes="240px"
+              className="h-auto w-[240px]"
+            />
+            <h1 className="mt-6 font-display text-base font-normal text-ink-900">
               Illinois community associations
             </h1>
-            <p className="mt-1 text-xs text-ink-500">
+            <p className="mt-1.5 text-xs text-ink-500">
               Registered-agent market share. Internal tool, authorised users only.
             </p>
           </div>

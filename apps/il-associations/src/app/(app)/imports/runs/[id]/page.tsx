@@ -80,7 +80,7 @@ export default async function ImportRunPage({ params }: { params: Promise<{ id: 
         <Link href="/imports" className="text-xs text-accent-700 hover:underline">
           ← Imports and updates
         </Link>
-        <h1 className="mt-1 text-xl font-semibold text-ink-900">Import run #{run.id}</h1>
+        <h1 className="mt-1 font-display text-xl font-normal text-ink-900">Import run #{run.id}</h1>
         <p className="mt-1 text-xs text-ink-500">
           <Link href={`/imports/bundles/${run.bundle_id}`} className="text-accent-700 hover:underline">
             {run.label}

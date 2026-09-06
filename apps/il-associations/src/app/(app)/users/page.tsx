@@ -57,7 +57,7 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-semibold text-ink-900">Users</h1>
+      <h1 className="font-display text-xl font-normal text-ink-900">Users</h1>
 
       <Card>
         <CardHeader

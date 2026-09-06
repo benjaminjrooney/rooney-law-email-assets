@@ -1,10 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { endSession, requireUser } from "@/lib/auth";
 import { Button } from "@/components/ui";
 import { NavLink } from "@/components/nav-link";
-import wordmark from "@/assets/rooney-law-wordmark.png";
 
 export const dynamic = "force-dynamic";
 
@@ -32,22 +30,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-ink-200 bg-white md:flex">
-        <div className="border-b border-ink-200 px-4 py-4">
-          {/*
-            The wordmark is a wide horizontal lockup with a tagline, so it needs
-            the full column width to stay legible; anything narrower turns the
-            tagline to mush. A stacked or tagline-free mark would sit better in
-            a sidebar this narrow — worth swapping in if the brand package has one.
-          */}
-          <Image
-            src={wordmark}
-            alt="Rooney Law, P.C."
-            priority
-            sizes="208px"
-            className="h-auto w-full"
-          />
-          <p className="mt-3 text-xs font-medium text-ink-600">Illinois community associations</p>
-          <p className="text-xs text-ink-400">Registered-agent market share</p>
+        {/*
+          The sidebar is 240px wide and the wordmark's stated screen minimum is
+          240px with 20px of clear space on each side, so the mark cannot go
+          here: the Brand Guide's instruction for a slot this narrow is the
+          compact mark (`Logos/email-logo.png`, minimum 120px) or the square
+          monogram, and neither file is in this repository yet.
+
+          So this is the firm's approved cross-channel framework instead — a
+          charcoal title band with an ivory editorial heading and a teal detail,
+          above light content fields. Type, not the mark, which is the one thing
+          the guide does not restrict. Drop `email-logo.png` into src/assets and
+          it belongs above the rule at 176px.
+
+          On charcoal, teal is a graphic and not a text colour: it measures
+          2.48:1 against it. The rule below is the teal detail; the secondary
+          line is the light neutral the guide names for exactly this, at 6.5:1.
+        */}
+        <div className="bg-ink-900 px-5 py-5">
+          <p className="font-display text-[15px] leading-snug tracking-wide text-ink-50">
+            Rooney Law, P.C.
+          </p>
+          <div className="mt-2.5 h-px w-8 bg-accent-600" aria-hidden="true" />
+          <p className="mt-2.5 text-xs leading-relaxed text-[#B9C4C4]">
+            Illinois community associations
+            <br />
+            Registered-agent market share
+          </p>
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
@@ -79,7 +88,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Compact navigation for narrow screens, where the sidebar is hidden. */}
         <div className="flex items-center gap-2 overflow-x-auto border-b border-ink-200 bg-white px-3 py-2 md:hidden">
-          <Image src={wordmark} alt="Rooney Law, P.C." className="h-5 w-auto shrink-0" priority />
+          {/*
+            Same rule as the sidebar: no mark below its minimum. The firm name
+            in the display face holds the slot until the compact mark is here.
+          */}
+          <span className="shrink-0 whitespace-nowrap font-display text-xs text-ink-900">
+            Rooney Law, P.C.
+          </span>
           {[...sections, { href: "/account", label: "Your account" }].map((section) => (
             <Link
               key={section.href}

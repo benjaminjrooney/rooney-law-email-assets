@@ -242,7 +242,7 @@ export default async function DashboardPage({
 function PageHeading({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <h1 className="text-xl font-semibold text-ink-900">{title}</h1>
+      <h1 className="font-display text-xl font-normal text-ink-900">{title}</h1>
       {action}
     </div>
   );

@@ -48,7 +48,7 @@ export default async function AgentsPage({
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-ink-900">Registered agents</h1>
+        <h1 className="font-display text-xl font-normal text-ink-900">Registered agents</h1>
         <ModeToggle mode={filters.mode} />
       </div>
 

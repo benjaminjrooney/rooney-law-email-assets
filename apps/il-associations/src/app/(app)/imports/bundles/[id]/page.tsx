@@ -99,7 +99,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
         <Link href="/imports" className="text-xs text-accent-700 hover:underline">
           ← Imports and updates
         </Link>
-        <h1 className="mt-1 text-xl font-semibold text-ink-900">{bundleRow.label}</h1>
+        <h1 className="mt-1 font-display text-xl font-normal text-ink-900">{bundleRow.label}</h1>
         <p className="mt-1 text-xs text-ink-500">
           Bundle #{bundleRow.id} · {bundleRow.status}
           {bundleRow.created_by ? ` · created by ${bundleRow.created_by}` : ""}

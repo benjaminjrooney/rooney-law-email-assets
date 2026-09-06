@@ -52,7 +52,7 @@ export default async function AssociationDetailPage({
         <Link href="/associations" className="text-xs text-accent-700 hover:underline">
           ← Associations
         </Link>
-        <h1 className="mt-1 text-xl font-semibold text-ink-900">{association.legal_name}</h1>
+        <h1 className="mt-1 font-display text-xl font-normal text-ink-900">{association.legal_name}</h1>
         <p className="mt-1 text-xs text-ink-500">
           Legal entity name exactly as supplied by the source. Normal form:{" "}
           <span className="font-mono">{association.legal_name_normalized}</span>
