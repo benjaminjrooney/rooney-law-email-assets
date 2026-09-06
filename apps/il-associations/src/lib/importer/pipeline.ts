@@ -911,6 +911,37 @@ export async function refreshAgentCounts(sql: Sql): Promise<void> {
 }
 
 /** Drop this run's staging rows once the roster is built. */
+/**
+ * Drop scratch rows left behind by runs that are over.
+ *
+ * A run that died before it could tidy up leaves its staging rows in place, and
+ * the next run then reads and writes around them. That is not just wasted disk:
+ * the rows are dead but unvacuumed, so every index scan walks past them and
+ * every index-only scan falls back to the heap. An import that took two minutes
+ * against a clean table took over forty against one carrying a dead run's
+ * leavings — same data, same query.
+ *
+ * Runs still marked running are left alone. One may genuinely be live, and no
+ * import gets to decide that another one is not.
+ */
+export async function dropAbandonedStaging(sql: Sql, importRunId: number): Promise<number> {
+  // The row count comes from the command tag. RETURNING would make the server
+  // marshal every deleted row back to us, which is how the first version of the
+  // purge command took the database down.
+  const result = await sql`
+    DELETE FROM staging_records
+    WHERE import_run_id <> ${importRunId}
+      AND import_run_id IN (SELECT id FROM import_runs WHERE status IS DISTINCT FROM 'running')`;
+  /*
+   * Vacuum whether or not that deleted anything. Rows already deleted by a run
+   * that then failed to vacuum are invisible to the statement above and are
+   * exactly the weight worth shedding, and on a clean table this costs
+   * milliseconds.
+   */
+  await reclaimStaging(sql);
+  return result.count ?? 0;
+}
+
 export async function clearStaging(sql: Sql, importRunId: number): Promise<void> {
   await sql`DELETE FROM staging_records WHERE import_run_id = ${importRunId}`;
   await reclaimStaging(sql);

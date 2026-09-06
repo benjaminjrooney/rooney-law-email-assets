@@ -14,6 +14,7 @@ import {
   buildRoster,
   clearStaging,
   clearStagingForFamily,
+  dropAbandonedStaging,
   emptyCounts,
   finishFamily,
   refreshAgentCounts,
@@ -186,6 +187,13 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
 
   try {
     await sql`UPDATE import_runs SET status = 'running', phase = 'staging', started_at = COALESCE(started_at, now()) WHERE id = ${importRunId}`;
+
+    // Start from a clean staging table. Anything a finished run left there is
+    // dead weight this run would otherwise read around; see dropAbandonedStaging.
+    const abandoned = await dropAbandonedStaging(sql, importRunId);
+    if (abandoned > 0) {
+      report("staging", `discarded ${abandoned.toLocaleString("en-US")} scratch rows from earlier runs`);
+    }
 
     /*
      * Staging and building, one family at a time.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "postgres";
-import { clearStaging, clearStagingForFamily } from "@/lib/importer/pipeline";
+import { clearStaging, clearStagingForFamily, dropAbandonedStaging } from "@/lib/importer/pipeline";
 
 /**
  * Clearing a family's scratch rows must survive a failing vacuum.
@@ -25,7 +25,7 @@ function connectionWhere(failing: RegExp): { sql: Sql; calls: Call[] } {
     calls.push(text);
     return failing.test(text)
       ? Promise.reject(new Error('could not resize shared memory segment: No space left on device'))
-      : Promise.resolve([]);
+      : Promise.resolve(Object.assign([], { count: 0 }));
   }) as unknown as Sql;
   return { sql, calls };
 }
@@ -53,5 +53,33 @@ describe("clearing staging rows", () => {
     // The vacuum is optional; losing the rows is not.
     const { sql } = connectionWhere(/DELETE/);
     await expect(clearStagingForFamily(sql, 7, "llc")).rejects.toThrow();
+  });
+});
+
+describe("scratch left by earlier runs", () => {
+  it("removes it, and never touches a run still marked running", async () => {
+    const { sql, calls } = connectionWhere(/never/);
+    await dropAbandonedStaging(sql, 9);
+    const del = calls.find((call) => call.startsWith("DELETE FROM staging_records"));
+    expect(del).toBeDefined();
+    // Not this run's rows — it is about to write them.
+    expect(del).toContain("import_run_id <> ?");
+    // Not a live run's either; only this run can know it is not live.
+    expect(del).toContain("status IS DISTINCT FROM 'running'");
+  });
+
+  it("does not ask the server to send back every deleted row", async () => {
+    // RETURNING here is what took the database down the first time.
+    const { sql, calls } = connectionWhere(/never/);
+    await dropAbandonedStaging(sql, 9);
+    expect(calls.some((call) => call.includes("RETURNING"))).toBe(false);
+  });
+
+  it("vacuums even when the delete removed nothing", async () => {
+    // Rows a failed run deleted but never vacuumed are invisible to that
+    // delete and are the weight most worth shedding.
+    const { sql, calls } = connectionWhere(/never/);
+    await dropAbandonedStaging(sql, 9);
+    expect(calls.some((call) => call.includes("VACUUM"))).toBe(true);
   });
 });
