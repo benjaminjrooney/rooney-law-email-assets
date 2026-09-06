@@ -131,6 +131,28 @@ import, or a re-run after a failure — from the Railway console:
 `npm run configure:refresh -- --cadence weekly --enable` sets the schedule
 configuration the same way, for when the application itself is unreachable.
 
+### When the volume is full
+
+An import that dies part way used to leave every staged row behind, and staging
+is by far the largest thing the database holds — the six files are roughly eight
+million rows and three and a half gigabytes, against a roster of thirty thousand.
+A run cleans up after itself now, including after a failure, but a database that
+ran out of disk mid-write cannot always finish that cleanup. This is the way out:
+
+    npm run purge:staging            refuses while an import is running
+    npm run purge:staging -- --all   empties it anyway, ending that import
+
+Run it the same way as the refresh above: set it as the start command and force a
+rebuild. It truncates, which is the only thing that works on a full volume — a
+DELETE of that many rows writes its own weight in write-ahead log, and VACUUM
+FULL wants room for a second copy of the table, neither of which exists at that
+point. Truncating is all-or-nothing, so it refuses by default if any run is
+marked running; a run that died before it could record its own status looks
+exactly the same from here, and `--all` is how you say which it is.
+
+Nothing outside a running import reads staging, so there is nothing to lose here
+beyond a run that is already lost.
+
 ### Getting the files in
 
 Two paths, both on the bundle page.
@@ -267,6 +289,7 @@ layouts — five unconfirmed, plus the LLC Name layout derived from real data.
 | `npm run import -- …` | Command-line import (see below) |
 | `npm run inspect -- --file …` | Report on a source file without importing it |
 | `npm run refresh` | Optional scheduled refresh entry point |
+| `npm run purge:staging` | Empty the staging table when a run died holding it |
 | `npm run lint` / `npm run typecheck` / `npm test` | Checks |
 
 ---
