@@ -131,6 +131,33 @@ import, or a re-run after a failure — from the Railway console:
 `npm run configure:refresh -- --cadence weekly --enable` sets the schedule
 configuration the same way, for when the application itself is unreachable.
 
+### What a full run costs
+
+Measured on the first import that ran end to end, against a 5 GB volume:
+
+| Stage | Time |
+|---|---|
+| Fetching all six files from the Secretary of State | 30 s |
+| Staging the LLC family (three files) | 4 min |
+| Building the LLC roster | 48 s |
+| Staging the corporation family | 5 min |
+| Building the corporation roster | 1 min 42 s |
+| **Whole run** | **17 min** |
+
+    llc  1,488,747 joined rows read →     1,779 associations
+    cdx  1,983,236 joined rows read →    32,297 associations
+                                        --------
+                                          34,076
+
+Peak disk was 3.8 GB of 5. That is one family's staging plus the roster, which
+is what the per-family split buys; staging all six at once needed 4.96 GB and
+ran out. If the Secretary of State's files grow by half, this still fits. If
+they double, it will not, and the answer then is a larger volume rather than a
+cleverer import.
+
+A build reports each of its stages with a duration, so a slow run says where
+the time went rather than sitting silent under one "[building]" line.
+
 ### When the volume is full
 
 An import that dies part way used to leave every staged row behind, and staging
