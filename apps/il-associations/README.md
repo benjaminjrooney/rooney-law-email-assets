@@ -11,36 +11,47 @@ authentication.
 
 ---
 
-## Read this first: what this build cannot tell you
+## Read this first: how to read these numbers
 
-**1. Two of the six record layouts still need you.** The corporation layouts are
-transcribed from the official ILSOS documentation — "Procedures to Access Corp
-Data", v004 (2024-04-04) — field by field, including its COBOL names, and are
-seeded `confirmed` with that citation. The LLC **Name** layout is seeded from
-observation: all 1,494,050 records of a real `llcallnam.txt`, with a citation
-that says exactly that rather than claiming documentation.
+**All six record layouts are documented.** Every field position is transcribed
+from the Illinois Secretary of State's own publications — "Procedures to Access
+Corp Data" and "Procedures to Access LL Data", both v004 (2024-04-04) — carrying
+each document's COBOL names and DD numbers, and each layout cites the document it
+came from. Nothing rests on inference.
 
-**`llc/agent` and `llc/master` remain unconfirmed.** Their record layout is a
-separate publication —
-[Procedures to Access LLC Data](https://www.ilsos.gov/content/dam/data/bs/proc_llc_data.pdf)
-— that this build has not seen. The brief is explicit that field definitions
-must never be invented, so they aren't: **the importer refuses to run in write
-mode against an unconfirmed layout.** Transcribe them in the import wizard, with
-the observed column boundaries beside you as a cross-check, or hand the PDF to
-whoever is maintaining this and they can be seeded the same way the corporation
-ones were. See [`layouts/README.md`](layouts/README.md).
+The LLC Name layout was originally derived from 1,494,050 real records before
+the documentation was available. The document says the same thing to the
+character (`LL-NAME X(120)`, positions 009–128), and it is now seeded from the
+document like the rest.
 
-**2. Corporation status is mapped; LLC status is not.** All eighteen corporation
-status codes (00 Goodstanding through 17 Ag-Coop) come from data element 41006 of
-the same document, and **Active-only works for corporations** — using the
-Secretary of State's own definition of good standing, `CORP-STATUS < 3`, which is
-codes 00, 01 and 02.
+**Entity status is mapped for both families, from separate tables.** Corporation
+codes run 00–17 (data element 41006); LLC codes run 00–14 (42010). They are
+deliberately not shared, because the same number means different things:
 
-An LLC status still reads *"Source code not yet mapped."* The corporation table
-is deliberately **not** borrowed for it: the LLC codes are published separately
-and are not assumed to match. An unrecognised corporation code is also reported
-unmapped rather than guessed at, in case the file carries one added after the
-revision transcribed here.
+| Code | Corporation | LLC |
+|---|---|---|
+| 02 | Intent to dissolve | **NGS** (not in good standing) |
+| 08 | Dissolved | Voluntary Dissolution/Terminated |
+| 11 | Expired | Administratively Dissolved |
+
+Good standing follows each document. The corporation procedures state a rule
+outright — `CORP-STATUS < 3`, so codes 00, 01 and 02. The LLC procedures state
+none, so the state's own labels decide: 00 Goodstanding and 01 Reinstated,
+with 02 excluded because "NGS" is the abbreviation the corporation document
+spells out as Not-In-Goodstanding. Sharing one table would have reported LLCs the
+state marks not in good standing as active.
+
+A code outside the documented range is still reported as
+*"Source code not yet mapped."* rather than guessed at, in case a file carries
+one added after these revisions.
+
+**Fields the documents define but this application does not interpret** keep
+`role: "unmapped"` with `provenance: "documented"` — the position and source
+name are documented, the value simply is not read — and their raw contents are
+retained under their own keys. Two are left that way on purpose rather than
+plausibly mapped: `CORP-TRANS-DATE` is not read as an effective date, which the
+document never calls it, and the agent code is retained but not yet used by
+classification.
 
 Two further caveats are stated throughout the UI and in every export, because
 they matter to how the numbers should be read:

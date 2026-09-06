@@ -23,59 +23,18 @@ import { inclusionRuleSets, recordLayouts } from "./schema";
  */
 
 /**
- * Layouts established by observation rather than by documentation.
+ * The LLC Name layout was derived before the documentation was available.
  *
- * The LLC Name file is the one file this build has actually seen. Across all
- * 1,494,050 records of a September 2026 `llcallnam.txt`, every record is an
- * 8-digit file number followed by the legal name running to the end of the
- * record — variable length, CRLF-delimited, no gutter between the two fields,
- * closed by an `END OF FILE RECORD COUNT=` trailer.
+ * Across all 1,494,050 records of a September 2026 `llcallnam.txt`, every record
+ * read as an 8-digit file number followed by the legal name to end of record.
+ * It was seeded `operator_confirmed` with a citation saying exactly that.
  *
- * That is strong enough to seed as `operator_confirmed`, and the citation says
- * exactly what it rests on. It is deliberately NOT marked `documented`: it was
- * derived from the data, not transcribed from the official ILSOS record
- * layout. An operator can re-edit it in the import wizard at any time, and this
- * seed never overwrites a layout that has already been confirmed.
+ * The document has since arrived and says the same thing: LL-NAME is X(120) at
+ * 009–128 on a 128-character record. The derivation was right to the character,
+ * and llc/name is now seeded from the document like the rest, so nothing in the
+ * database rests on an inference any more. Kept as a note because it is the one
+ * layout with independent confirmation from two directions.
  */
-const DERIVED_FROM_DATA =
-  "Derived from a September 2026 llcallnam.txt (1,494,050 records, run date 2026-09-04): " +
-  "every record is an 8-digit file number followed by the legal name to end of record. " +
-  "NOT transcribed from official ILSOS record-layout documentation.";
-
-const DERIVED_LAYOUTS: {
-  family: EntityFamily;
-  fileKind: FileKind;
-  recordLength: number | null;
-  fields: LayoutField[];
-}[] = [
-  {
-    family: "llc",
-    fileKind: "name",
-    // Records are variable length, so there is no fixed record length to set.
-    recordLength: null,
-    fields: [
-      {
-        key: "file_number",
-        label: "Illinois file number",
-        start: 1,
-        length: 8,
-        role: "file_number",
-        provenance: "operator_confirmed",
-        notes: "All 1,494,050 sampled records carry 8 leading digits here.",
-      },
-      {
-        key: "legal_name",
-        label: "Legal entity name",
-        start: 9,
-        // Longest record observed was 128 characters.
-        length: 120,
-        role: "legal_name",
-        provenance: "operator_confirmed",
-        notes: "Runs to the end of the record; the file carries one record per entity.",
-      },
-    ],
-  },
-];
 
 /**
  * Layouts transcribed from the official ILSOS record-layout documentation.
@@ -98,16 +57,20 @@ const DERIVED_LAYOUTS: {
  * seen, so llc/agent and llc/master remain unconfirmed.
  */
 const CORP_DOC = "ILSOS “Procedures to Access Corp Data”, v004 (2024-04-04), RECORD DESCRIPTIONS.";
+const LLC_DOC = "ILSOS “Procedures to Access LL Data”, v004 (2024-04-04), RECORD DESCRIPTIONS.";
 
 export const DOCUMENTED_LAYOUTS: {
   family: EntityFamily;
   fileKind: FileKind;
   recordLength: number;
+  /** The document this layout came from. The two families have different ones. */
+  document: string;
   fields: LayoutField[];
 }[] = [
   {
     family: "cdx",
     fileKind: "name",
+    document: CORP_DOC,
     // "The Name record types will be transmitted in fixed-length ... records."
     recordLength: 197,
     fields: [
@@ -136,6 +99,7 @@ export const DOCUMENTED_LAYOUTS: {
   {
     family: "cdx",
     fileKind: "agent",
+    document: CORP_DOC,
     recordLength: 164,
     fields: [
       {
@@ -227,6 +191,7 @@ export const DOCUMENTED_LAYOUTS: {
   {
     family: "cdx",
     fileKind: "master",
+    document: CORP_DOC,
     recordLength: 160,
     fields: [
       {
@@ -338,6 +303,322 @@ export const DOCUMENTED_LAYOUTS: {
       },
     ],
   },
+  {
+    family: "llc",
+    fileKind: "name",
+    document: LLC_DOC,
+    // "The Name record types will be transmitted in fixed-length one hundred
+    // and twenty-eight (128) character records."
+    recordLength: 128,
+    fields: [
+      {
+        key: "file_number",
+        label: "Illinois file number",
+        start: 1,
+        length: 8,
+        role: "file_number",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42001 LL-FILE-NUMBER 9(08) 001–008. Last digit is a modulus-11 check digit.",
+      },
+      {
+        key: "legal_name",
+        label: "Legal entity name",
+        start: 9,
+        length: 120,
+        role: "legal_name",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42028 LL-NAME X(120) 009–128.",
+      },
+    ],
+  },
+  {
+    family: "llc",
+    fileKind: "agent",
+    document: LLC_DOC,
+    recordLength: 164,
+    fields: [
+      {
+        key: "file_number",
+        label: "Illinois file number",
+        start: 1,
+        length: 8,
+        role: "file_number",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42001 LL-FILE-NUMBER 9(08) 001–008.",
+      },
+      {
+        key: "agent_code",
+        label: "Agent code (individual or named commercial agent)",
+        start: 9,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42002 LL-AGENT-CODE X(01) 009–009. Same code list as a corporation record but at a different position. Retained, not yet used by classification.",
+      },
+      {
+        key: "agent_name",
+        label: "Registered agent name",
+        start: 10,
+        length: 60,
+        role: "agent_name",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42003 LL-AGENT-NAME X(60) 010–069.",
+      },
+      {
+        key: "agent_street",
+        label: "Agent street",
+        start: 70,
+        length: 45,
+        role: "agent_street",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42004 LL-AGENT-STREET X(45) 070–114.",
+      },
+      {
+        key: "agent_city",
+        label: "Agent city",
+        start: 115,
+        length: 30,
+        role: "agent_city",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42005 LL-AGENT-CITY X(30) 115–144.",
+      },
+      {
+        key: "agent_zip",
+        label: "Agent ZIP",
+        start: 145,
+        length: 9,
+        role: "agent_zip",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42006 LL-AGENT-ZIP 9(09) 145–153.",
+      },
+      {
+        key: "agent_county",
+        label: "Agent county code",
+        start: 154,
+        length: 3,
+        role: "agent_county",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42007 LL-AGENT-COUNTY-CODE 9(03) 154–156.",
+      },
+      {
+        key: "agent_change_date",
+        label: "Agent change date",
+        start: 157,
+        length: 8,
+        role: "agent_change_date",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42008 LL-AGENT-CHANGE-DATE 9(08) 157–164. Holds the organisation date until the first agent change.",
+      },
+    ],
+  },
+  {
+    family: "llc",
+    fileKind: "master",
+    document: LLC_DOC,
+    recordLength: 136,
+    fields: [
+      {
+        key: "file_number",
+        label: "Illinois file number",
+        start: 1,
+        length: 8,
+        role: "file_number",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42001 LL-FILE-NUMBER 9(08) 001–008.",
+      },
+      {
+        key: "purpose_code",
+        label: "Purpose code",
+        start: 9,
+        length: 6,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42009 LL-PURPOSE-CODE 9(06) 009–014. The business code from IRS Form 1065.",
+      },
+      {
+        key: "status_code",
+        label: "Entity status",
+        start: 15,
+        length: 2,
+        role: "status_code",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42010 LL-STATUS-CODE 9(02) 015–016. Codes 00–14; see src/lib/ilsos/status-codes.ts. Not the same table as a corporation.",
+      },
+      {
+        key: "status_date",
+        label: "Status date",
+        start: 17,
+        length: 8,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42011 LL-STATUS-DATE 9(08) 017–024. Date the current status was attained; the organisation date on a new LLC.",
+      },
+      {
+        key: "organized_date",
+        label: "Organisation date",
+        start: 25,
+        length: 8,
+        role: "organization_date",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42012 LL-ORGANIZED-DATE 9(08) 025–032. Date organised to do business in Illinois, which for a foreign LLC need not be its original jurisdiction date.",
+      },
+      {
+        key: "dissolution_date",
+        label: "Dissolution date",
+        start: 33,
+        length: 8,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42013 LL-DISSOLUTION-DATE 9(08) 033–040. The latest date on which the LLC is to dissolve.",
+      },
+      {
+        key: "management_type",
+        label: "Management type",
+        start: 41,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42014 LL-MANAGEMENT-TYPE 9(01) 041–041. 0 none selected (foreign only); 1 member managed; 2 manager managed; 3 both.",
+      },
+      {
+        key: "juris_organized",
+        label: "Jurisdiction organised",
+        start: 42,
+        length: 2,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42016 LL-JURIS-ORGANIZED X(02) 042–043. Two-letter state, or a numeric country code.",
+      },
+      {
+        key: "records_office_street",
+        label: "Records office street",
+        start: 44,
+        length: 45,
+        role: "registered_office_street",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42017 LL-RECORDS-OFF-STREET X(45) 044–088. Where the LLC keeps its records under the LLC Act.",
+      },
+      {
+        key: "records_office_city",
+        label: "Records office city",
+        start: 89,
+        length: 30,
+        role: "registered_office_city",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42018 LL-RECORDS-OFF-CITY X(30) 089–118.",
+      },
+      {
+        key: "records_office_zip",
+        label: "Records office ZIP",
+        start: 119,
+        length: 9,
+        role: "registered_office_zip",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42019 LL-RECORDS-OFF-ZIP X(09) 119–127.",
+      },
+      {
+        key: "records_office_juris",
+        label: "Records office jurisdiction",
+        start: 128,
+        length: 2,
+        role: "registered_office_state",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42016 LL-RECORDS-OFF-JURIS X(02) 128–129. Two-letter state in the ordinary case; the document allows a numeric country code here too.",
+      },
+      {
+        key: "assumed_ind",
+        label: "Assumed-name indicator",
+        start: 130,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42020 LL-ASSUMED-IND 9(01) 130. 0 none; 1 assumed name on file.",
+      },
+      {
+        key: "old_ind",
+        label: "Old-name indicator",
+        start: 131,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42021 LL-OLD-IND 9(01) 131.",
+      },
+      {
+        key: "provisions_ind",
+        label: "Provisions indicator",
+        start: 132,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42022 LL-PROVISIONS-IND 9(01) 132.",
+      },
+      {
+        key: "opt_ind",
+        label: "Optional-provisions indicator",
+        start: 133,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42086 LL-OPT-IND 9(01) 133.",
+      },
+      {
+        key: "series_ind",
+        label: "Series indicator",
+        start: 134,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42103 LL-SERIES-IND X(01) 134.",
+      },
+      {
+        key: "uap_ind",
+        label: "UAP indicator",
+        start: 135,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42107 LL-UAP-IND X(01) 135.",
+      },
+      {
+        key: "l3c_ind",
+        label: "L3C indicator",
+        start: 136,
+        length: 1,
+        role: "unmapped",
+        provenance: "documented",
+        documentedBy: LLC_DOC,
+        notes: "42106 LL-L3C-IND X(01) 136.",
+      },
+    ],
+  },
 ];
 
 export async function seedReferenceData(
@@ -389,45 +670,16 @@ export async function seedReferenceData(
     }
   }
 
-  // Apply derived layouts, but never over an operator's own confirmation.
-  for (const derived of DERIVED_LAYOUTS) {
-    const [existing] = await db
-      .select({ id: recordLayouts.id, status: recordLayouts.status })
-      .from(recordLayouts)
-      .where(
-        and(
-          eq(recordLayouts.family, derived.family),
-          eq(recordLayouts.fileKind, derived.fileKind),
-        ),
-      )
-      .limit(1);
-
-    if (!existing || existing.status === "confirmed") continue;
-
-    await db
-      .update(recordLayouts)
-      .set({
-        status: "confirmed",
-        recordLength: derived.recordLength,
-        fields: derived.fields,
-        header: {
-          expectToken: HEADER_TOKENS[derived.family][derived.fileKind],
-          expectHeader: true,
-        },
-        sourceDocument: DERIVED_FROM_DATA,
-        confirmedBy: "system (derived from source data)",
-        confirmedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(recordLayouts.id, existing.id));
-  }
-
   // Apply documented layouts, on the same terms: never over an operator's own
   // confirmation. These carry the official citation rather than a derivation
   // note, because they were transcribed from the published record layout.
   for (const documented of DOCUMENTED_LAYOUTS) {
     const [existing] = await db
-      .select({ id: recordLayouts.id, status: recordLayouts.status })
+      .select({
+        id: recordLayouts.id,
+        status: recordLayouts.status,
+        confirmedBy: recordLayouts.confirmedBy,
+      })
       .from(recordLayouts)
       .where(
         and(
@@ -437,7 +689,15 @@ export async function seedReferenceData(
       )
       .limit(1);
 
-    if (!existing || existing.status === "confirmed") continue;
+    if (!existing) continue;
+    /*
+     * An operator's own confirmation is never overwritten. A confirmation this
+     * seed made itself is, so a layout that was derived from data before the
+     * documentation existed picks up the documented positions and the real
+     * citation on the next migration instead of keeping a stale provenance.
+     */
+    const ours = existing.confirmedBy?.startsWith("system") ?? false;
+    if (existing.status === "confirmed" && !ours) continue;
 
     await db
       .update(recordLayouts)
@@ -449,7 +709,7 @@ export async function seedReferenceData(
           expectToken: HEADER_TOKENS[documented.family][documented.fileKind],
           expectHeader: true,
         },
-        sourceDocument: CORP_DOC,
+        sourceDocument: documented.document,
         confirmedBy: "system (transcribed from ILSOS documentation)",
         confirmedAt: new Date(),
         updatedAt: new Date(),
