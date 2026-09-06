@@ -10,7 +10,14 @@ import {
   statusCodesFor,
   hasStatusMapping,
 } from "@/lib/ilsos/status-codes";
-import { ENTITY_FAMILIES, FILE_KINDS, type EntityFamily } from "@/lib/ilsos/layout";
+import {
+  ENTITY_FAMILIES,
+  EXPECTED_FILES,
+  FILE_KINDS,
+  PUBLISHED_SOURCE_URLS,
+  type EntityFamily,
+} from "@/lib/ilsos/layout";
+import { assertFetchableUrl } from "@/lib/importer/fetch-url";
 
 /**
  * The record layouts and code tables, checked against the documents they were
@@ -335,5 +342,37 @@ describe("documented LLC status codes", () => {
 
   it("still reports a code beyond the documented range as unmapped", () => {
     expect(resolveStatus("llc", "15").isMapped).toBe(false);
+  });
+});
+
+describe("published source URLs", () => {
+  it("covers all six files", () => {
+    for (const family of ENTITY_FAMILIES) {
+      for (const kind of FILE_KINDS) {
+        expect(PUBLISHED_SOURCE_URLS[family][kind]).toMatch(/^https:\/\//);
+      }
+    }
+  });
+
+  it("points each entry at its own file, so no slot fetches another's data", () => {
+    // A copy-paste error here would import the agent file as the name file and
+    // quietly produce a roster of nonsense.
+    for (const family of ENTITY_FAMILIES) {
+      for (const kind of FILE_KINDS) {
+        expect(PUBLISHED_SOURCE_URLS[family][kind]).toContain(
+          `${EXPECTED_FILES[family][kind]}.zip`,
+        );
+      }
+    }
+    expect(new Set(Object.values(PUBLISHED_SOURCE_URLS).flatMap((f) => Object.values(f))).size).toBe(6);
+  });
+
+  it("passes the fetch guard", async () => {
+    // https, public host — the same check the server applies before downloading.
+    for (const family of ENTITY_FAMILIES) {
+      await expect(
+        assertFetchableUrl(PUBLISHED_SOURCE_URLS[family].name),
+      ).resolves.toBeInstanceOf(URL);
+    }
   });
 });

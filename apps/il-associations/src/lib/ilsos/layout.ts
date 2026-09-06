@@ -122,6 +122,31 @@ export const EXPECTED_FILES: Record<EntityFamily, Record<FileKind, string>> = {
 };
 
 /**
+ * Where the Illinois Secretary of State publishes each file.
+ *
+ * Supplied by the operator from the Data Transparency Act download page
+ * (ilsos.gov/data/bus-serv-home.html), which serves them from apps.ilsos.gov.
+ * They are pre-filled into the scheduled-refresh form so nobody has to retype
+ * six URLs, and are editable there: if the Secretary of State moves them, the
+ * saved setting wins and this becomes only a starting suggestion.
+ *
+ * Nothing fetches these on its own. They are a default in a form an
+ * administrator saves, and the importer only ever requests the URL it is given.
+ */
+export const PUBLISHED_SOURCE_URLS: Record<EntityFamily, Record<FileKind, string>> = {
+  llc: {
+    name: "https://apps.ilsos.gov/data/bs/llcallnam.zip",
+    agent: "https://apps.ilsos.gov/data/bs/llcallagt.zip",
+    master: "https://apps.ilsos.gov/data/bs/llcallmst.zip",
+  },
+  cdx: {
+    name: "https://apps.ilsos.gov/data/bs/cdxallnam.zip",
+    agent: "https://apps.ilsos.gov/data/bs/cdxallagt.zip",
+    master: "https://apps.ilsos.gov/data/bs/cdxallmst.zip",
+  },
+};
+
+/**
  * Text expected inside a file's header record.
  *
  * This is NOT the filename. A real header looks like:

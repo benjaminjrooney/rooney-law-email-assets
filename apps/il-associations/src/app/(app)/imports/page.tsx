@@ -20,6 +20,7 @@ import {
   ENTITY_FAMILIES,
   EXPECTED_FILES,
   FAMILY_LABELS,
+  PUBLISHED_SOURCE_URLS,
   FILE_KINDS,
 } from "@/lib/ilsos/layout";
 import type { ImportCounts } from "@/lib/db/schema";
@@ -256,8 +257,9 @@ export default async function ImportsPage() {
                     Source URLs — where the job downloads each file from
                   </p>
                   <p className="text-xs text-ink-500">
-                    Direct links only. ILSOS regenerates every file daily, and each one is a
-                    complete snapshot rather than a set of changes, so any run picks up everything.
+                    Pre-filled with where ILSOS publishes each file; edit any of them if that
+                    changes. ILSOS regenerates every file daily, and each one is a complete
+                    snapshot rather than a set of changes, so any run picks up everything.
                   </p>
                   {ENTITY_FAMILIES.map((family) => (
                     <div key={family} className="space-y-1.5 pt-1">
@@ -273,7 +275,10 @@ export default async function ImportsPage() {
                             name={`url-${family}-${kind}`}
                             type="url"
                             inputMode="url"
-                            defaultValue={sources[`${family}-${kind}`] ?? ""}
+                            defaultValue={
+                              sources[`${family}-${kind}`] ??
+                              PUBLISHED_SOURCE_URLS[family][kind]
+                            }
                             placeholder={`https://…/${EXPECTED_FILES[family][kind]}.zip`}
                           />
                         </Field>
