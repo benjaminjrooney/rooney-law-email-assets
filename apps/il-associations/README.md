@@ -382,7 +382,12 @@ root:
    | `STORAGE_DRIVER` | `s3` |
    | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | your bucket |
    | `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | for S3-compatible providers |
-   | `NODE_ENV` | `production` (makes the session cookie `Secure`) |
+
+   Do **not** set `NODE_ENV=production` as a service variable. `npm ci` honours
+   it and omits devDependencies, so Tailwind's PostCSS plugin and TypeScript go
+   missing and `next build` fails. Nothing needs it: `next start` sets NODE_ENV
+   itself at runtime, and the session cookie's `Secure` flag is decided by
+   `APP_URL` being https (see `secureCookies()` in `src/lib/env.ts`).
 
    Object storage is not optional in production: Railway's container
    filesystem is ephemeral, so the `local` driver loses uploaded source files

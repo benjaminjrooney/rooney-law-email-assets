@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { getSql } from "@/lib/db";
-import { isProduction } from "@/lib/env";
+import { secureCookies } from "@/lib/env";
 import {
   SESSION_COOKIE,
   createSessionToken,
@@ -72,7 +72,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
 export async function startSession(user: SessionUser): Promise<void> {
   const token = await createSessionToken(user);
   const store = await cookies();
-  store.set(SESSION_COOKIE, token, sessionCookieOptions(isProduction()));
+  store.set(SESSION_COOKIE, token, sessionCookieOptions(secureCookies()));
 }
 
 export async function endSession(): Promise<void> {

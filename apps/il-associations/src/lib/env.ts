@@ -29,7 +29,22 @@ export const authSecret = (): string => {
 
 export const appUrl = (): string => process.env.APP_URL ?? "http://localhost:3000";
 
-export const isProduction = (): boolean => process.env.NODE_ENV === "production";
+/**
+ * Whether the session cookie should carry the `Secure` flag.
+ *
+ * Deliberately not `NODE_ENV === "production"` alone. Setting NODE_ENV=production
+ * in the deploy environment breaks the build: `npm ci` then honours it and omits
+ * devDependencies, so Tailwind's PostCSS plugin and TypeScript are missing when
+ * `next build` runs. The security property must not depend on a variable we
+ * cannot safely set, so the served scheme decides it: if the app is reached over
+ * https, the cookie is Secure. NODE_ENV is still honoured when it is set, which
+ * covers `next start` (which sets it itself) and any non-Railway host.
+ *
+ * The `local` default in appUrl() is http, so development keeps a readable
+ * cookie over plain http.
+ */
+export const secureCookies = (): boolean =>
+  appUrl().startsWith("https://") || process.env.NODE_ENV === "production";
 
 const storageSchema = z.discriminatedUnion("driver", [
   z.object({
