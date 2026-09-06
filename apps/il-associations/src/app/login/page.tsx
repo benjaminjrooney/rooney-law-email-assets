@@ -1,6 +1,8 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { currentUser, signIn, startSession } from "@/lib/auth";
 import { Button, Card, CardBody, Field, Input } from "@/components/ui";
+import wordmark from "@/assets/rooney-law-wordmark.png";
 
 export const dynamic = "force-dynamic";
 
@@ -34,14 +36,23 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink-100 px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-lg font-semibold text-ink-900">Illinois Community Associations</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Internal market-analysis database. Authorised users only.
-          </p>
-        </div>
-
         <Card>
+          {/*
+            The wordmark lives inside the card because the supplied PNG has an
+            opaque white background — on the tinted page behind it, it would
+            show as a pale rectangle. A transparent PNG or an SVG would let it
+            sit anywhere.
+          */}
+          <div className="flex flex-col items-center border-b border-ink-200 px-6 pb-5 pt-7 text-center">
+            <Image src={wordmark} alt="Rooney Law, P.C." priority className="h-auto w-[236px]" />
+            <h1 className="mt-5 text-sm font-semibold text-ink-900">
+              Illinois community associations
+            </h1>
+            <p className="mt-1 text-xs text-ink-500">
+              Registered-agent market share. Internal tool, authorised users only.
+            </p>
+          </div>
+
           <CardBody className="space-y-4 py-5">
             {params.error ? (
               <p
@@ -73,7 +84,7 @@ export default async function LoginPage({
         </Card>
 
         <p className="mt-4 text-center text-xs text-ink-400">
-          Accounts are created with <code className="font-mono">npm run seed:users</code>.
+          Need access? Ask an administrator to add you under Users.
         </p>
       </div>
     </main>

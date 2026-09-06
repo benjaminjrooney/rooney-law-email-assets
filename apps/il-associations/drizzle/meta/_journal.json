@@ -8,6 +8,13 @@
       "when": 1788628051618,
       "tag": "0000_first_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788691593438,
+      "tag": "0001_daffy_christian_walker",
+      "breakpoints": true
     }
   ]
 }

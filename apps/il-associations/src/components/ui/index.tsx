@@ -24,7 +24,9 @@ const BUTTON_VARIANTS: Record<NonNullable<ButtonProps["variant"]>, string> = {
   secondary:
     "bg-white text-ink-800 ring-1 ring-inset ring-ink-300 hover:bg-ink-50 focus-visible:outline-ink-400",
   ghost: "text-ink-700 hover:bg-ink-100 focus-visible:outline-ink-400",
-  danger: "bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600",
+  // A muted brick rather than a pure red: it still reads as "careful" but sits
+  // with the wordmark's navy and sage instead of shouting over them.
+  danger: "bg-[#9B3F3C] text-white hover:bg-[#853430] focus-visible:outline-[#9B3F3C]",
 };
 
 export function Button({ variant = "primary", size = "md", className, ...props }: ButtonProps) {

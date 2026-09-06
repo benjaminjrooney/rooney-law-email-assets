@@ -22,7 +22,7 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
-/** Minimum password policy for seeded and changed passwords. */
+/** Minimum password policy for seeded, changed and reset passwords. */
 export function passwordProblems(plain: string): string[] {
   const problems: string[] = [];
   if (plain.length < 12) problems.push("Password must be at least 12 characters.");
@@ -33,9 +33,7 @@ export function passwordProblems(plain: string): string[] {
   return problems;
 }
 
-export type SignInResult =
-  | { ok: true; user: SessionUser }
-  | { ok: false; message: string };
+export type SignInResult = { ok: true; user: SessionUser } | { ok: false; message: string };
 
 export async function signIn(email: string, password: string): Promise<SignInResult> {
   const sql = getSql();
@@ -67,12 +65,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
 
   return {
     ok: true,
-    user: {
-      id: row.id,
-      email: row.email,
-      displayName: row.display_name,
-      role: row.role,
-    },
+    user: { id: row.id, email: row.email, displayName: row.display_name, role: row.role },
   };
 }
 
@@ -87,10 +80,56 @@ export async function endSession(): Promise<void> {
   store.delete(SESSION_COOKIE);
 }
 
-/** The signed-in user, or null. Safe to call from any server component. */
+/**
+ * The signed-in user, checked against the database.
+ *
+ * The cookie alone is not trusted for authorisation. A signed token stays valid
+ * until it expires, so without this check a deactivated account would keep
+ * working for the rest of its session, a demoted admin would keep admin powers,
+ * and a changed password would not lock out whoever knew the old one. Each of
+ * those is settled here:
+ *
+ *  - the account must still exist and still be active;
+ *  - the token must have been issued at or after `password_changed_at`;
+ *  - the role comes from the row, not from the token.
+ *
+ * Costs one indexed lookup per request, which is the right trade for an
+ * internal tool holding a firm's market analysis.
+ */
 export async function currentUser(): Promise<SessionUser | null> {
   const store = await cookies();
-  return readSessionToken(store.get(SESSION_COOKIE)?.value);
+  const session = await readSessionToken(store.get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+
+  const sql = getSql();
+  const [row] = await sql<
+    {
+      id: number;
+      email: string;
+      display_name: string;
+      role: "admin" | "analyst";
+      is_active: boolean;
+      password_changed_at: Date;
+    }[]
+  >`
+    SELECT id, email, display_name, role, is_active, password_changed_at
+    FROM users WHERE id = ${session.id} LIMIT 1`;
+
+  if (!row || !row.is_active) return null;
+
+  if (session.issuedAt !== null) {
+    // One second of slack: the token's issued-at has second precision, so a
+    // token minted in the same second as the change would otherwise be refused.
+    const changedAt = Math.floor(new Date(row.password_changed_at).getTime() / 1000);
+    if (session.issuedAt < changedAt - 1) return null;
+  }
+
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+  };
 }
 
 /** The signed-in user, or a redirect to the sign-in page. */
@@ -100,11 +139,13 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
+export class NotAuthorizedError extends Error {}
+
 /** Guard for operations reserved to administrators. */
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== "admin") {
-    throw new Error("This action requires an administrator account.");
+    throw new NotAuthorizedError("This action requires an administrator account.");
   }
   return user;
 }

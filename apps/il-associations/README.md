@@ -280,6 +280,8 @@ through **Classification review**.
 
 | Page | What it's for |
 |---|---|
+| **Your account** | Change your own password. Doing so ends every other signed-in session |
+| **Users** (admins) | Add people, set roles, deactivate and reactivate accounts, reset a forgotten password |
 | **Dashboard** | Totals, category split, top ten agents, association types, inclusion signals — with the denominator and data currency stated on screen |
 | **Associations** | Server-side filtering, sorting and pagination; exact source names and normalised groupings shown separately; per-record provenance and matched signals |
 | **Registered agents** | Ranked directory by normalised organisation or exact source name; per-agent share, classification rationale, aliases, address variants, and every entity represented |
@@ -288,6 +290,28 @@ through **Classification review**.
 | **Exports and backups** | CSV, Excel and backup generation, and every previous export with its filter metadata |
 
 An **Automatic / Reviewed** toggle runs through every chart, table and export.
+
+### Accounts
+
+Two roles. **Analysts** read, filter, review classifications and export. **Admins**
+also import and manage users.
+
+The session cookie is a signed token, but it is not trusted on its own: every
+request re-checks the account against the database. That is what makes
+deactivating someone take effect immediately rather than whenever their token
+happens to expire, keeps a demoted admin from holding admin powers for the rest
+of the day, and voids old sessions the moment a password changes. The last
+active administrator cannot be deactivated, demoted or locked out.
+
+### Branding
+
+The palette is taken from the firm wordmark rather than chosen by eye —
+`#2C3A47` (the lettering), `#1F2E3C` (its deepest shade) and `#97B4B5` (the
+divider and tagline). `src/assets/rooney-law-wordmark.png` is a copy of the
+published email wordmark. It has an **opaque white background**, so it can only
+sit on a white surface; a transparent PNG or an SVG would let it be placed
+anywhere, and a stacked or tagline-free variant would suit the narrow sidebar
+better than the wide horizontal lockup.
 
 ---
 

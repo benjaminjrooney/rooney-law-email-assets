@@ -20,14 +20,19 @@ import {
  * entirely and keeps the charts legible in print and in forced-colours mode.
  * A table of the same figures sits beside or beneath each chart.
  *
- * Palette: validated blue slot (#2a78d6) on the light chart surface —
- * lightness band, chroma floor and 3:1 contrast all pass.
+ * Palette: the firm's teal, stepped down from the wordmark's sage so it carries
+ * enough weight against a white surface. It clears the lightness band and 3:1
+ * contrast. It sits under the categorical chroma floor, which is deliberate and
+ * fine here: that floor exists so several series stay distinguishable from one
+ * another, and these charts have one series whose identity comes from the axis
+ * label. A muted teal is also simply what this brand is — saturating it enough
+ * to clear a floor that does not apply would just make it the wrong colour.
  */
 
-const SERIES = "#2a78d6";
-const SERIES_MUTED = "#9ec5f4";
-const GRID = "#e6e6e9";
-const TEXT_SECONDARY = "#52514e";
+const SERIES = "#3F7F82";
+const SERIES_MUTED = "#B9CFD0";
+const GRID = "#E4E8EA";
+const TEXT_SECONDARY = "#4A5763";
 
 export type BarDatum = {
   label: string;
@@ -101,7 +106,7 @@ export function HorizontalBars({
         />
         <Tooltip
           content={<ChartTooltip />}
-          cursor={{ fill: "rgba(42,120,214,0.06)" }}
+          cursor={{ fill: "rgba(63,127,130,0.07)" }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false}>
           {data.map((datum) => (

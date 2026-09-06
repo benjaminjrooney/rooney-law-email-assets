@@ -47,6 +47,17 @@ export const users = pgTable(
     role: text("role").$type<"admin" | "analyst">().notNull().default("analyst"),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    /**
+     * Sessions issued before this moment are refused.
+     *
+     * A session is a signed token the server does not otherwise track, so
+     * changing a password would leave the old token working until it expired.
+     * Comparing the token's issued-at against this column is what makes a
+     * password change — and an admin reset — take effect immediately.
+     */
+    passwordChangedAt: timestamp("password_changed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     createdAt,
     updatedAt,
   },

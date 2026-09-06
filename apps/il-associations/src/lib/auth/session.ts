@@ -19,6 +19,12 @@ export type SessionUser = {
   role: "admin" | "analyst";
 };
 
+/** A decoded session, plus when the token was issued. */
+export type DecodedSession = SessionUser & {
+  /** Unix seconds the token was signed, or null if the claim was missing. */
+  issuedAt: number | null;
+};
+
 const key = (): Uint8Array => new TextEncoder().encode(authSecret());
 
 export async function createSessionToken(user: SessionUser): Promise<string> {
@@ -34,7 +40,9 @@ export async function createSessionToken(user: SessionUser): Promise<string> {
     .sign(key());
 }
 
-export async function readSessionToken(token: string | undefined): Promise<SessionUser | null> {
+export async function readSessionToken(
+  token: string | undefined,
+): Promise<DecodedSession | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, key(), { algorithms: ["HS256"] });
@@ -46,6 +54,7 @@ export async function readSessionToken(token: string | undefined): Promise<Sessi
       email: String(payload.email ?? ""),
       displayName: String(payload.displayName ?? ""),
       role,
+      issuedAt: typeof payload.iat === "number" ? payload.iat : null,
     };
   } catch {
     // An expired or tampered token is simply "not signed in".
