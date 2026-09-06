@@ -13,6 +13,7 @@ import { writeAudit } from "@/lib/audit";
 import {
   buildRoster,
   clearStaging,
+  clearStagingForFamily,
   emptyCounts,
   finishFamily,
   refreshAgentCounts,
@@ -186,32 +187,46 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
   try {
     await sql`UPDATE import_runs SET status = 'running', phase = 'staging', started_at = COALESCE(started_at, now()) WHERE id = ${importRunId}`;
 
-    // ---- Phase 1: staging -------------------------------------------------
-    for (const file of files) {
-      report("staging", `${file.family}/${file.file_kind} — ${file.original_filename}`);
-      const localPath = join(temporaryDirectory, `${file.family}-${file.file_kind}`);
-      const storage = getStorage();
-      await streamPipeline(await storage.get(file.storage_key), createWriteStream(localPath));
-
-      const result = await stageSourceFile(sql, importRunId, {
-        sourceFileId: file.id,
-        family: file.family,
-        fileKind: file.file_kind,
-        localPath,
-        containerFormat: file.container_format,
-        layout: layoutsByKey.get(`${file.family}-${file.file_kind}`)!,
-        // The header record is skipped; the wizard confirms it exists.
-        skip: 1,
-      });
-      counts.errors += result.errors;
-      warnings.push(...result.warnings);
-      await rm(localPath, { force: true });
-    }
-
-    // ---- Phase 2: build ---------------------------------------------------
-    await sql`UPDATE import_runs SET phase = 'building' WHERE id = ${importRunId}`;
+    /*
+     * Staging and building, one family at a time.
+     *
+     * These were two phases: stage all six files, then build each family. That
+     * is tidier to read and it put every raw record from every file into
+     * staging_records simultaneously — about eight million rows to produce a
+     * roster of thirty-odd thousand. On a 5 GB volume it ran out of disk part
+     * way through the fifth file, with "could not extend file ... No space left
+     * on device".
+     *
+     * A family's three files are all that any single join needs, so a family is
+     * now staged, built, and its staging rows dropped before the next one
+     * starts. Peak disk is one family instead of two.
+     */
     for (const family of ENTITY_FAMILIES) {
       if (!familiesPresent.includes(family)) continue;
+
+      await sql`UPDATE import_runs SET phase = 'staging' WHERE id = ${importRunId}`;
+      for (const file of files.filter((candidate) => candidate.family === family)) {
+        report("staging", `${file.family}/${file.file_kind} — ${file.original_filename}`);
+        const localPath = join(temporaryDirectory, `${file.family}-${file.file_kind}`);
+        const storage = getStorage();
+        await streamPipeline(await storage.get(file.storage_key), createWriteStream(localPath));
+
+        const result = await stageSourceFile(sql, importRunId, {
+          sourceFileId: file.id,
+          family: file.family,
+          fileKind: file.file_kind,
+          localPath,
+          containerFormat: file.container_format,
+          layout: layoutsByKey.get(`${file.family}-${file.file_kind}`)!,
+          // The header record is skipped; the wizard confirms it exists.
+          skip: 1,
+        });
+        counts.errors += result.errors;
+        warnings.push(...result.warnings);
+        await rm(localPath, { force: true });
+      }
+
+      await sql`UPDATE import_runs SET phase = 'building' WHERE id = ${importRunId}`;
       report("building", family);
 
       const runDates = files
@@ -249,6 +264,9 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
         mode: options.mode,
         trigger: options.trigger,
       });
+
+      // Free this family's scratch rows before the next family needs the room.
+      await clearStagingForFamily(sql, importRunId, family);
     }
 
     // ---- Phase 3: finish --------------------------------------------------
@@ -258,8 +276,6 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
       await refreshAgentCounts(sql);
       await sql`UPDATE source_bundles SET status = 'imported', updated_at = now() WHERE id = ${options.bundleId}`;
     }
-    await clearStaging(sql, importRunId);
-
     const [errorCount] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM import_errors WHERE import_run_id = ${importRunId}`;
     counts.errors = errorCount?.n ?? counts.errors;
@@ -292,6 +308,14 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
     throw error;
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
+    /*
+     * Always, including after a failure. A failed run used to leave every
+     * staged row in place; that is what filled the volume and kept it full,
+     * so the next attempt had no room to start.
+     */
+    await clearStaging(sql, importRunId).catch((error: unknown) => {
+      console.error("Could not clear staging rows:", error);
+    });
   }
 }
 

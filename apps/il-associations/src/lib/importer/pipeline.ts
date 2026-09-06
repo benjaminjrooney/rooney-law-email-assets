@@ -914,3 +914,19 @@ export async function refreshAgentCounts(sql: Sql): Promise<void> {
 export async function clearStaging(sql: Sql, importRunId: number): Promise<void> {
   await sql`DELETE FROM staging_records WHERE import_run_id = ${importRunId}`;
 }
+
+/**
+ * Drop one family's staging rows, so the next family has the disk back.
+ *
+ * The join only ever reads one family at a time, so nothing later in the run
+ * needs these.
+ */
+export async function clearStagingForFamily(
+  sql: Sql,
+  importRunId: number,
+  family: EntityFamily,
+): Promise<void> {
+  await sql`
+    DELETE FROM staging_records
+    WHERE import_run_id = ${importRunId} AND family = ${family}`;
+}

@@ -21,7 +21,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "configure:refresh": "tsx src/scripts/configure-refresh.ts"
+    "configure:refresh": "tsx src/scripts/configure-refresh.ts",
+    "purge:staging": "tsx src/scripts/purge-staging.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
