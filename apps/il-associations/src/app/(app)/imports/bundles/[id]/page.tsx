@@ -24,6 +24,7 @@ import {
   ENTITY_FAMILIES,
   EXPECTED_FILES,
   FAMILY_LABELS,
+  PUBLISHED_SOURCE_URLS,
   FILE_KINDS,
   type EntityFamily,
   type FileKind,
@@ -114,7 +115,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
       {/* Step 1 ------------------------------------------------------------ */}
       <Card>
         <CardHeader
-          title="Step 1 — Upload the six source files"
+          title="Step 1 — Add the six source files"
           description={
             missing.length === 0
               ? "All six slots are filled."
@@ -209,14 +210,21 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
                           <input type="hidden" name="family" value={family} />
                           <input type="hidden" name="fileKind" value={kind} />
                           <Field label="…or fetch it from a URL">
+                            {/*
+                              Filled in, not hinted. A placeholder reads as an
+                              empty box on a phone, which is exactly where this
+                              path is most useful — the whole point is not
+                              pushing sixty megabytes up from a handset. Edit it
+                              if the Secretary of State moves the file.
+                            */}
                             <Input
                               name="url"
                               type="url"
                               inputMode="url"
-                              placeholder={`https://…/${EXPECTED_FILES[family][kind]}.zip`}
+                              defaultValue={PUBLISHED_SOURCE_URLS[family][kind]}
                             />
                           </Field>
-                          <Button type="submit" size="sm" variant="ghost">
+                          <Button type="submit" size="sm" variant="secondary">
                             Fetch
                           </Button>
                         </form>
@@ -233,8 +241,8 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
       {/* Step 2 ------------------------------------------------------------ */}
       <Card>
         <CardHeader
-          title="Step 2 — Confirm each record layout"
-          description="Transcribe field positions from the official ILSOS record-layout documentation. The inferred boundaries below come from your own file and are a cross-check, not an answer."
+          title="Step 2 — Record layouts"
+          description="All six are already confirmed against the official ILSOS documentation, so there is normally nothing to do here. The boundaries inferred from your own file are shown as a cross-check."
         />
         <CardBody className="space-y-6">
           {files.length === 0 ? (
