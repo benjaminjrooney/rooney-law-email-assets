@@ -55,10 +55,28 @@ on, never inside the document.
 
 ## Email signature wordmark
 
-`rooney-law-wordmark-email-480w.png` is the public Rooney Law wordmark used in
-the firm's email signature. The file is intentionally public so email recipients
-can retrieve the logo when messages are received.
+`rooney-law-wordmark-email-480w.png` is the public Rooney Law wordmark. It is
+intentionally public so email recipients can retrieve the logo when messages are
+received.
 
-The signature should reference the direct raw HTTPS file URL, not the GitHub page
-URL. Do not rename or move the published PNG without first updating the central
-Exchange signature rule.
+### This copy is being retired, and must not be deleted
+
+As of 6 September 2026 the firm's website is live and serves the same image at
+
+    https://rooneylawpc.com/.well-known/rooney-law-email-logo.png
+
+That is the URL the Brand Guide names and the one the Exchange signature rule
+should point at. Two hosted copies of one logo is how the wrong one ends up in a
+signature, so this one stops being referenced.
+
+**Stops being referenced, not deleted.** A mail client fetches the image when the
+recipient opens the message, including messages sent months ago. Removing this
+file breaks the logo in every email the firm has already sent. Leave it here.
+
+The two files are byte identical, so the switch changes nothing visually. Once the
+Exchange rule is changed, new mail pulls from `rooneylawpc.com` and old mail keeps
+pulling from here, and both show the same wordmark.
+
+If the signature is ever pointed back at this file, reference the direct raw HTTPS
+file URL, not the GitHub page URL, and do not rename or move the PNG without
+updating the central Exchange signature rule first.

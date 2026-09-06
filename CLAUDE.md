@@ -10,11 +10,19 @@ Two unrelated things: the Word add-in that mails letters through Lob, and the pu
 email-signature wordmark. See `README.md`.
 
 `rooney-law-wordmark-email-480w.png` is intentionally public so email recipients can
-retrieve the logo. The email signature must reference the direct raw HTTPS file URL, not
-the GitHub page URL. Do not rename or move it without first updating the central
-Exchange signature rule.
+retrieve the logo.
 
-Related: the firm's website lives at `benjaminjrooney/rooney-law-website`. The Brand
-Guide's hosted email logo (`rooneylawpc.com/.well-known/rooney-law-email-logo.png`) is
-not live. Decide whether signatures point there or at the raw file here, then retire the
-other. Two hosted copies of one logo is how the wrong one ends up in a signature.
+**That question is settled.** The firm's website went live on 6 September 2026 and
+serves the same image, byte for byte, at
+`https://rooneylawpc.com/.well-known/rooney-law-email-logo.png`. That is the URL the
+Brand Guide names, it is on a domain the firm controls, and the site caches
+`/.well-known/` for an hour rather than a year so that replacing the logo actually
+reaches sent signatures. The Exchange signature rule points there. This copy is retired.
+
+**Retired does not mean deleted. Never delete this file.** A mail client fetches the
+image when the recipient opens the message, including mail sent long ago, so removing it
+breaks the logo in every email the firm has already sent. It stops being referenced; it
+does not stop existing. Do not rename or move it either.
+
+Related: the firm's website lives at `benjaminjrooney/rooney-law-website`. Its
+`STATUS.md` is the current state of that project.
