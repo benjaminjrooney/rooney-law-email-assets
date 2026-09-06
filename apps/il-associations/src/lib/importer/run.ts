@@ -257,6 +257,7 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
         family,
         sourceRunDate,
         mode: options.mode,
+        onProgress: (message) => { report("building", message); },
       });
 
       counts.inserted += result.counts.inserted;

@@ -458,6 +458,16 @@ export type BuildOptions = {
   sourceRunDate: string | null;
   /** Preview mode reports what would change without writing the roster. */
   mode: "preview" | "write";
+  /**
+   * Progress within the build, so it is not one silent step.
+   *
+   * "[building] llc" covered everything from the unmatched count to the last
+   * upsert. That step has taken three minutes and it has taken forty, and from
+   * the outside the two were indistinguishable — every diagnosis had to be
+   * reasoned from disk graphs rather than read. Each stage now says when it
+   * finished and how long it took.
+   */
+  onProgress?: (message: string) => void;
 };
 
 export type BuildResult = { counts: ImportCounts; warnings: string[] };
@@ -473,6 +483,10 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
   const compiled = compileRuleSet(options.ruleSetRules);
   const agentCache = new Map<string, number>();
   const { importRunId, family, mode } = options;
+
+  const startedAt = Date.now();
+  const since = (from: number) => `${((Date.now() - from) / 1000).toFixed(1)}s`;
+  const step = (message: string) => options.onProgress?.(`${family}: ${message}`);
 
   /*
    * Agent or Master records whose file number never appears in the Name file.
@@ -495,6 +509,7 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
    * SET LOCAL, so it lasts exactly as long as this transaction and never
    * becomes a standing allocation on a pooled connection.
    */
+  const unmatchedStartedAt = Date.now();
   counts.unmatched = await sql.begin(async (tx) => {
     await tx`SET LOCAL work_mem = '256MB'`;
     await tx`SET LOCAL max_parallel_workers_per_gather = 0`;
@@ -511,6 +526,11 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
     return row?.n ?? 0;
   });
 
+  step(`unmatched count in ${since(unmatchedStartedAt)} (${counts.unmatched.toLocaleString("en-US")})`);
+
+  const joinStartedAt = Date.now();
+  let rowsRead = 0;
+  let firstRowAt: number | null = null;
   let pending: Candidate[] = [];
   let multipleNameRecords = 0;
   let unmappedStatusCodes = 0;
@@ -561,6 +581,11 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
     ORDER BY n.file_number`.cursor(BUILD_BATCH);
 
   for await (const rows of cursor) {
+    if (firstRowAt === null) {
+      firstRowAt = Date.now();
+      step(`join returned its first rows in ${since(joinStartedAt)}`);
+    }
+    rowsRead += rows.length;
     for (const row of rows) {
       const { candidate, dateWarnings } = toCandidate(row, family, compiled);
       for (const warning of dateWarnings) warnings.add(warning);
@@ -590,6 +615,12 @@ export async function buildRoster(sql: Sql, options: BuildOptions): Promise<Buil
   if (pending.length > 0) {
     await persistBatch(sql, options, pending, agentCache, counts);
   }
+
+  step(
+    `read ${rowsRead.toLocaleString("en-US")} joined rows in ${since(joinStartedAt)}; ` +
+      `+${counts.inserted} / ~${counts.updated} / =${counts.unchanged} / -${counts.excluded} ` +
+      `in ${since(startedAt)} overall`,
+  );
 
   if (multipleNameRecords > 0) {
     warnings.add(
