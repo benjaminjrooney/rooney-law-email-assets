@@ -1,20 +1,22 @@
 import { closeDb, getSql } from "@/lib/db";
 
 /**
- * Delete staging rows and reclaim the disk they hold.
+ * Empty the staging table and return its disk to the filesystem.
  *
  * `staging_records` is scratch: raw source rows an import reads once to build
- * the roster. Nothing outside a running import reads them, and a completed
- * import clears its own. Rows only survive a run that died part way.
+ * the roster. Nothing outside a running import reads them, and a run clears its
+ * own. Rows only survive a run that died part way.
  *
- *   npm run purge:staging              rows from runs that are not running
- *   npm run purge:staging -- --all     every row, including a live run's
+ *   npm run purge:staging            refuses while an import is running
+ *   npm run purge:staging -- --all   empties it anyway, ending that import
  *
- * A plain DELETE frees space for Postgres to reuse but does not return it to
- * the filesystem, which is no help when the volume is already full — so this
- * follows with VACUUM FULL, which rewrites the table and does return it. That
- * takes an exclusive lock, which is why it is a deliberate command rather than
- * something the importer does on its own.
+ * This truncates. The first version deleted and then VACUUM FULLed, which
+ * cannot work in the one situation the command exists for. Deleting eight
+ * million rows writes its own weight in write-ahead log, and VACUUM FULL needs
+ * room for a second copy of the table — both on a volume with nothing left.
+ * Asked to do it for real the delete ran for forty seconds and took the
+ * database down with it. TRUNCATE unlinks the files instead: near-free, and the
+ * space comes back at once.
  */
 async function main(): Promise<void> {
   const all = process.argv.includes("--all");
@@ -25,18 +27,34 @@ async function main(): Promise<void> {
     FROM staging_records`;
   console.log(`staging_records: ${before?.rows.toLocaleString("en-US")} rows, ${before?.bytes}`);
 
-  const deleted = all
-    ? await sql`DELETE FROM staging_records RETURNING 1`
-    : await sql`
-        DELETE FROM staging_records
-        WHERE import_run_id IN (
-          SELECT id FROM import_runs WHERE status IS DISTINCT FROM 'running'
-        )
-        RETURNING 1`;
-  console.log(`deleted ${deleted.length.toLocaleString("en-US")} rows`);
+  /*
+   * A run marked running may be genuinely live, or may be one that died without
+   * getting to write its own status — which is the usual reason for reaching
+   * for this command. Only the operator can tell the two apart, so say which
+   * run it is and let them decide, rather than guessing from how old it looks.
+   */
+  const running = await sql<{ id: number }[]>`
+    SELECT id FROM import_runs WHERE status = 'running' ORDER BY id`;
+  if (running.length > 0 && !all) {
+    const ids = running.map((row) => `#${row.id}`).join(", ");
+    console.error(`Import run ${ids} is still marked running; emptying the table would break it.`);
+    console.error("If it is not really running, re-run with --all.");
+    process.exitCode = 1;
+    return;
+  }
 
-  console.log("vacuuming (exclusive lock, returns the space to the filesystem) …");
-  await sql`VACUUM FULL staging_records`;
+  await sql`TRUNCATE staging_records`;
+
+  if (running.length > 0) {
+    // We just removed what they were reading; record that rather than leaving
+    // them running forever and offered as resumable.
+    await sql`
+      UPDATE import_runs
+      SET status = 'failed', finished_at = now(),
+          error_message = COALESCE(error_message, 'Staging rows purged; the run could not continue.')
+      WHERE status = 'running'`;
+    console.log(`marked ${running.length} interrupted run(s) failed`);
+  }
 
   const [after] = await sql<{ rows: number; bytes: string }[]>`
     SELECT count(*)::int AS rows, pg_size_pretty(pg_total_relation_size('staging_records')) AS bytes

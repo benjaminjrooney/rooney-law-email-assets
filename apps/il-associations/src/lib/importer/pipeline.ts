@@ -913,6 +913,26 @@ export async function refreshAgentCounts(sql: Sql): Promise<void> {
 /** Drop this run's staging rows once the roster is built. */
 export async function clearStaging(sql: Sql, importRunId: number): Promise<void> {
   await sql`DELETE FROM staging_records WHERE import_run_id = ${importRunId}`;
+  await reclaimStaging(sql);
+}
+
+/**
+ * Make the space a delete freed usable again.
+ *
+ * A DELETE only marks rows dead. The pages stay allocated to the table until a
+ * vacuum, so without this the second family would extend the table rather than
+ * write into the first family's pages, and peak disk would still be the whole
+ * import — which is the thing the per-family split exists to avoid.
+ *
+ * Plain VACUUM, not FULL: it takes no exclusive lock and needs no second copy
+ * of the table, neither of which is affordable in the middle of a run. What it
+ * guarantees is that the pages become reusable, which is all the next family
+ * needs; where the emptied pages happen to sit at the end of the table it also
+ * shortens the file and the volume gets the space back outright, which is what
+ * happens after the last family.
+ */
+async function reclaimStaging(sql: Sql): Promise<void> {
+  await sql`VACUUM staging_records`;
 }
 
 /**
@@ -929,4 +949,5 @@ export async function clearStagingForFamily(
   await sql`
     DELETE FROM staging_records
     WHERE import_run_id = ${importRunId} AND family = ${family}`;
+  await reclaimStaging(sql);
 }
