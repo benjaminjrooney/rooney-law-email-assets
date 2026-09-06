@@ -389,6 +389,13 @@ root:
    itself at runtime, and the session cookie's `Secure` flag is decided by
    `APP_URL` being https (see `secureCookies()` in `src/lib/env.ts`).
 
+   The build script empties `.next/cache` first. Turbopack's persistent cache is
+   a shared cache mount on Railway and it can replay an old failure: one build
+   genuinely broken by a missing devDependency kept failing two later commits
+   that were fine, with the same error in three seconds and no recompile.
+   Clearing the cache and changing nothing else made the same commit build. A
+   cold compile takes about six seconds, so the cache was not buying much.
+
    Object storage is not optional in production: Railway's container
    filesystem is ephemeral, so the `local` driver loses uploaded source files
    and generated exports on every redeploy.
