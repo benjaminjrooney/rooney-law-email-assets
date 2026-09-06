@@ -114,6 +114,23 @@ Either way nothing is archived and the job exits non-zero, which is what a
 scheduler notices. `test/archive-guard.test.ts` covers both limits, the ordinary
 churn that must still pass, and the first import into an empty database.
 
+### Running the refresh by hand
+
+The cron service normally waits for its schedule. To make it run now — a first
+import, or a re-run after a failure — from the Railway console:
+
+1. Clear the service's **cron schedule** (a cron service only runs on schedule).
+2. Set the **start command** to `npm run refresh`.
+3. **Redeploy — but only a rebuild picks up a new start command.** Railpack bakes
+   it into the image at build time, so pressing redeploy replays the previous
+   image and runs the *previous* command. Push a commit, or change something
+   that forces a rebuild.
+4. Read the container logs for the result.
+5. Restore the cron schedule (`0 12 * * 5`) when finished.
+
+`npm run configure:refresh -- --cadence weekly --enable` sets the schedule
+configuration the same way, for when the application itself is unreachable.
+
 ### Getting the files in
 
 Two paths, both on the bundle page.
