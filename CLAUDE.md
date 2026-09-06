@@ -11,32 +11,45 @@ email-signature wordmark. See `README.md`.
 
 `rooney-law-wordmark-email-480w.png` is a public copy of the Rooney Law wordmark.
 
-## What actually uses this file: nothing that has been found
+## The signature embeds its logo. Leave it that way.
 
-Checked on 6 September 2026, because both this file and `README.md` previously stated
-that the firm's email signature points at it. The evidence says otherwise:
+Established 6 September 2026 by opening a sent message and by Ben confirming the setup.
 
-- Ben's Outlook signature does **not** reference a hosted URL. It carries the logo as an
-  inline attachment, `Outlook-Rooney Law.png`, 21,693 bytes, embedded in each message.
-  That is a different derivative again: it matches neither this file (12,074 bytes) nor
-  any copy in the website repository.
-- No message in the mailbox references `raw.githubusercontent.com` or this filename.
-  Both searches returned nothing.
-- Nothing in this repository's code references it. Only the prose describing it did.
+There is no central signature rule and no Exchange console involved. A transport rule
+could not produce what is actually in the mail: a transport disclaimer can only inject
+HTML and must fetch any image from a URL, and Ben's logo is an inline attachment,
+`Outlook-Rooney Law.png`, 21,693 bytes, embedded in each message. One signature lives in
+the mailbox, Outlook on the web holds it, and the phone is set to "use my signature from
+Outlook on the web". Ben maintains it by pasting.
 
-So there is no "central Exchange signature rule" pointing here, and there may be no
-central signature rule at all. The earlier note describing one appears to record an
-intention rather than a configuration.
+The embedded image was checked and is the approved wordmark: charcoal ROONEY, teal
+"Practical Counsel. Exceptional Results." It is a different export size from every copy
+in git, but it is the right mark.
 
-**What this changes.** The claim that deleting this file would break the logo in already
-sent mail was wrong: those messages embed their own copy and fetch nothing. That said,
-leave the file alone. Its cost is nothing, and "no reference found in the mailbox and
-the repository" is not the same as "no reference anywhere": a Word add-in template, a
-third-party signature tool, or an older mobile signature could still point at it, and
-none of those is visible from here.
+**Do not move this to a hosted URL.** The earlier plan was to point the signature at
+`rooneylawpc.com/.well-known/rooney-law-email-logo.png`. That is the wrong trade for a
+law firm:
 
-**Do not treat any of this as settled without asking Ben.** He is the one who knows
-whether a signature service exists.
+- An embedded image renders without the recipient approving remote content. A hosted one
+  is blocked by default in a good number of clients, so the logo silently does not
+  appear, which looks worse than the 23KB the attachment costs.
+- A hosted logo makes every opened email a request to the firm's own server. That is an
+  open-tracking signal attached to privileged correspondence, for no benefit.
+
+The only thing a hosted logo buys is changing the mark in already-sent mail, which is
+not something the firm needs.
+
+The website still serves the file at that URL. It is live, correct, cached for an hour
+rather than a year, and available if the position ever changes. Nothing points at it
+today, and nothing should.
+
+## This file
+
+Nothing found in use references it. No message in the mailbox mentions
+`raw.githubusercontent.com` or this filename, and no code in this repository references
+it. Leave it in place anyway: it costs nothing, and not finding a reference in the
+mailbox and this repository is not proof there is none in a Word add-in template or an
+older signature somewhere.
 
 Related: the firm's website lives at `benjaminjrooney/rooney-law-website`. Its
 `STATUS.md` is the current state of that project.
