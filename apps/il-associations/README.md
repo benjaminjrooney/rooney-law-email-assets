@@ -358,12 +358,27 @@ under the minimum and visibly off-centre, and would leave 1.4% clear space on
 the right where the guide requires 8.3%. Trimming makes a CSS width the mark's
 width. OneDrive keeps the untrimmed masters.
 
-**Still missing.** Two assets, both in the Brand Kit:
+**The icon.** `src/app/icon.png` and `src/app/apple-icon.png` are the Brand
+Kit's square mark, byte for byte: `rooney-law-favicon-dark-512x512.png` and
+`-180x180.png`. Next's file convention picks them up and reads their real
+dimensions, so there is no hand-written `icons` entry to drift.
 
-| File | Brand Kit path | What it fixes |
-|---|---|---|
-| Compact mark | `Logos/email-logo.png` | `ROONEY \| Law, P.C.` without the tagline, minimum 120px — it would let the mark appear in slots too small for the full lockup |
-| Square monogram | `Logos/Web Icons/rooney-law-favicon-dark-*.png` | Replaces the placeholder `src/app/icon.svg`, which is a plain letterform rather than a trace, because the guide forbids redrawing the letterforms |
+The dark variant, for the reason `brand.json` gives for choosing it as the
+Windows icon: it carries its own charcoal ground, so one file reads on light and
+dark browser chrome alike. It stays legible down to 32px; at 16px the teal
+divider washes out and only the R survives. The kit's dark 16, 32 and 48px files
+would be sharper there and lighter to serve, and can be added as `icon1.png` and
+`icon2.png` alongside this one.
+
+The icons are named in `src/middleware.ts`'s matcher, because they are routes
+like any other. Without that, a signed-out browser asking for the tab icon is
+redirected to `/login` and the login page — the one page a signed-out visitor
+sees — shows no mark. That was already true of the placeholder that preceded
+them.
+
+**Still missing.** One asset: `Logos/email-logo.png`, the compact
+`ROONEY | Law, P.C.` mark without the tagline, minimum 120px. Nothing is blocked
+on it; it would let the mark appear in slots too small for the full lockup.
 
 ---
 

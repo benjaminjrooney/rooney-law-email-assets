@@ -32,7 +32,16 @@ export const metadata: Metadata = {
     "Internal market-analysis database of Illinois community associations and their registered agents.",
   // A private internal tool: keep it out of search indexes.
   robots: { index: false, follow: false },
-  icons: { icon: "/icon.svg" },
+  /*
+   * No `icons` entry: src/app/icon.png and src/app/apple-icon.png are picked up
+   * by Next's file convention, which reads each file's real dimensions and emits
+   * the right `sizes`. Both are the Brand Kit's square mark, byte for byte —
+   * rooney-law-favicon-dark-512x512.png and -180x180.png.
+   *
+   * The dark variant, for the reason brand.json gives for choosing it as the
+   * Windows icon: it carries its own charcoal ground, so it reads on a light or
+   * a dark browser chrome without a second file.
+   */
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -32,9 +32,14 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Everything except Next's own assets and the favicon. Static files carry
+     * Everything except Next's own assets and the app icons. Static files carry
      * no data from the roster, so there is nothing to protect there.
+     *
+     * The icons have to be listed by name. They are routes like any other, so
+     * without this a signed-out browser asking for the tab icon is redirected to
+     * /login and the login page — the one page a signed-out visitor sees — shows
+     * no mark at all. This was already true of the icon that preceded them.
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png).*)",
   ],
 };
