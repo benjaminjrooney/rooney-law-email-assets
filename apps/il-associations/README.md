@@ -333,27 +333,37 @@ Specification, with Georgia and Arial as the fallbacks that document names.
 `next/font` fetches them at build time and serves them from this origin, so no
 request leaves the browser for a font.
 
-**The mark.** `src/assets/rooney-law-wordmark.png` is
-`rooney-law-wordmark-light-source.png`, the master with an opaque white ground.
-It appears once, on the login card, at **240px** — the Brand Guide's stated
-screen minimum for the lockup with the tagline — inside the required clear space
-of 1/12 of its width.
+**The mark.** Two approved files are in `src/assets/`, both from the Brand Kit's
+`Logos/`: the transparent wordmark (charcoal lettering, teal divider) and the
+reversed transparent wordmark (ivory lettering). They appear at **240px**, the
+guide's stated screen minimum for the lockup with the tagline, with the required
+clear space of 1/12 of the mark's width — 20px — which nothing enters.
 
-It is deliberately **not** in the sidebar. That column is 240px wide, which
-leaves no room for the mark plus its clear space, and the guide is explicit that
-the wordmark is never set below its minimum. The sidebar uses the firm's
-approved cross-channel framework instead — a charcoal band, an ivory editorial
-heading, a teal detail — which is type rather than the mark.
+- **Login** — the transparent mark, on the ivory field above the card. Its
+  default use.
+- **Sidebar and the narrow-screen header** — the reversed mark on a charcoal
+  band. Its stated use, and the firm's approved cross-channel framework. The
+  sidebar is 288px so the mark fits at its minimum with clear space on all
+  sides. It carries the teal divider itself, so there is no second teal rule;
+  the line beneath is the light neutral the guide names for type on charcoal, at
+  6.5:1, because teal on charcoal is 2.48:1 and a graphic rather than a text
+  colour.
 
-**Approved assets this repository still needs.** All four are small and live in
-the Brand Kit; dropping them into `src/assets/` is the only step left:
+The copies here are the approved files **with their fully transparent margins
+trimmed and nothing else changed** — the trim was verified to drop no pixel with
+any alpha at all. It is not cosmetic. The masters are padded asymmetrically:
+378px of empty space on the left of a 1600px canvas and 17px on the right, with
+the mark itself 1205px. Drawing the canvas at 240px would put the mark at 181px,
+under the minimum and visibly off-centre, and would leave 1.4% clear space on
+the right where the guide requires 8.3%. Trimming makes a CSS width the mark's
+width. OneDrive keeps the untrimmed masters.
+
+**Still missing.** Two assets, both in the Brand Kit:
 
 | File | Brand Kit path | What it fixes |
 |---|---|---|
-| Transparent wordmark | `Logos/Rooney Law Wordmark Transparent.png` | The mark could then sit on the ivory field instead of being confined to a white card |
-| Compact mark | `Logos/email-logo.png` | `ROONEY \| Law, P.C.` without the tagline, minimum 120px — the right mark for the sidebar, at 176px |
-| Square monogram | `Logos/Web Icons/rooney-law-favicon-dark-*.png` | Replaces the placeholder `src/app/icon.svg`, which is a plain letterform because the guide forbids redrawing the letterforms |
-| Reversed wordmark | `Logos/Rooney Law Wordmark Reversed Transparent.png` | For anything set on charcoal |
+| Compact mark | `Logos/email-logo.png` | `ROONEY \| Law, P.C.` without the tagline, minimum 120px — it would let the mark appear in slots too small for the full lockup |
+| Square monogram | `Logos/Web Icons/rooney-law-favicon-dark-*.png` | Replaces the placeholder `src/app/icon.svg`, which is a plain letterform rather than a trace, because the guide forbids redrawing the letterforms |
 
 ---
 

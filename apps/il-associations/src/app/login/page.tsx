@@ -36,31 +36,33 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink-100 px-4">
       <div className="w-full max-w-sm">
+        {/*
+          The wordmark, per the Brand Guide.
+
+          240px is the stated screen minimum for the lockup with the tagline,
+          and it is measured on the mark, not on a canvas. The approved file is
+          padded asymmetrically — 378px of transparent margin on the left of a
+          1600px canvas and 17px on the right — so drawing the canvas at 240px
+          would have put the mark at 181px, under the minimum and off-centre.
+          The copy in src/assets is that file with its fully transparent margin
+          trimmed and nothing else touched, so this width is the mark's width.
+
+          The padding is the required clear space: 1/12 of the mark's width,
+          20px here, which nothing may enter.
+        */}
+        <div className="flex justify-center px-5 pb-6 pt-5">
+          <Image
+            src={wordmark}
+            alt="Rooney Law, P.C. — Practical Counsel. Exceptional Results."
+            priority
+            sizes="240px"
+            className="h-auto w-[240px]"
+          />
+        </div>
+
         <Card>
-          {/*
-            Wordmark placement, per the Brand Guide.
-
-            Width is 240px because that is the stated screen minimum for the
-            lockup with the tagline; the tagline is 2.6% of the mark's width and
-            turns to grey mush below it. The padding gives the required clear
-            space of 1/12 of the mark's width — 20px at this size — on all four
-            sides, which nothing else may enter.
-
-            The mark sits on white because the file we hold is
-            `rooney-law-wordmark-light-source.png`, the master with an opaque
-            white ground. The Brand Guide's default is
-            `Logos/Rooney Law Wordmark Transparent.png`; drop that in and this
-            can sit on the ivory field instead.
-          */}
-          <div className="flex flex-col items-center border-b border-ink-200 bg-white px-5 pb-5 pt-5 text-center">
-            <Image
-              src={wordmark}
-              alt="Rooney Law, P.C. — Practical Counsel. Exceptional Results."
-              priority
-              sizes="240px"
-              className="h-auto w-[240px]"
-            />
-            <h1 className="mt-6 font-display text-base font-normal text-ink-900">
+          <div className="border-b border-ink-200 px-6 pb-5 pt-5 text-center">
+            <h1 className="font-display text-base font-normal text-ink-900">
               Illinois community associations
             </h1>
             <p className="mt-1.5 text-xs text-ink-500">

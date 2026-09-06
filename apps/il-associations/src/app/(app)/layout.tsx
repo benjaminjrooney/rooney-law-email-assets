@@ -1,8 +1,10 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { endSession, requireUser } from "@/lib/auth";
 import { Button } from "@/components/ui";
 import { NavLink } from "@/components/nav-link";
+import wordmarkReversed from "@/assets/rooney-law-wordmark-reversed.png";
 
 export const dynamic = "force-dynamic";
 
@@ -29,30 +31,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-ink-200 bg-white md:flex">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-ink-200 bg-white md:flex">
         {/*
-          The sidebar is 240px wide and the wordmark's stated screen minimum is
-          240px with 20px of clear space on each side, so the mark cannot go
-          here: the Brand Guide's instruction for a slot this narrow is the
-          compact mark (`Logos/email-logo.png`, minimum 120px) or the square
-          monogram, and neither file is in this repository yet.
+          The reversed wordmark on a charcoal band — the Brand Guide's stated
+          use for it, and its approved cross-channel framework.
 
-          So this is the firm's approved cross-channel framework instead — a
-          charcoal title band with an ivory editorial heading and a teal detail,
-          above light content fields. Type, not the mark, which is the one thing
-          the guide does not restrict. Drop `email-logo.png` into src/assets and
-          it belongs above the rule at 176px.
+          The sidebar is 288px so that the mark can be drawn at its 240px
+          minimum with the required clear space of 1/12 its width, 20px, on
+          every side; px-6 and py-6 give 24px. Nothing enters that margin, which
+          is why the heading below sits a further 24px down.
 
-          On charcoal, teal is a graphic and not a text colour: it measures
-          2.48:1 against it. The rule below is the teal detail; the secondary
-          line is the light neutral the guide names for exactly this, at 6.5:1.
+          The mark carries the teal divider itself, so there is no second teal
+          rule here. On charcoal, teal is a graphic and not a text colour — it
+          measures 2.48:1 — so the line beneath is set in the light neutral the
+          guide names for exactly this, at 6.5:1.
         */}
-        <div className="bg-ink-900 px-5 py-5">
-          <p className="font-display text-[15px] leading-snug tracking-wide text-ink-50">
-            Rooney Law, P.C.
-          </p>
-          <div className="mt-2.5 h-px w-8 bg-accent-600" aria-hidden="true" />
-          <p className="mt-2.5 text-xs leading-relaxed text-[#B9C4C4]">
+        <div className="bg-ink-900 px-6 py-6">
+          <Image
+            src={wordmarkReversed}
+            alt="Rooney Law, P.C. — Practical Counsel. Exceptional Results."
+            priority
+            sizes="240px"
+            className="h-auto w-[240px]"
+          />
+          <p className="mt-6 text-xs leading-relaxed text-[#B9C4C4]">
             Illinois community associations
             <br />
             Registered-agent market share
@@ -86,15 +88,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Compact navigation for narrow screens, where the sidebar is hidden. */}
+        {/*
+          Narrow screens. The mark keeps its 240px minimum and its clear space
+          on a row of its own; the sections scroll beneath it rather than
+          crowding it, because nothing may enter that margin.
+        */}
+        <div className="border-b border-ink-200 bg-ink-900 px-5 py-5 md:hidden">
+          <Image
+            src={wordmarkReversed}
+            alt="Rooney Law, P.C. — Practical Counsel. Exceptional Results."
+            priority
+            sizes="240px"
+            className="h-auto w-[240px]"
+          />
+        </div>
         <div className="flex items-center gap-2 overflow-x-auto border-b border-ink-200 bg-white px-3 py-2 md:hidden">
-          {/*
-            Same rule as the sidebar: no mark below its minimum. The firm name
-            in the display face holds the slot until the compact mark is here.
-          */}
-          <span className="shrink-0 whitespace-nowrap font-display text-xs text-ink-900">
-            Rooney Law, P.C.
-          </span>
           {[...sections, { href: "/account", label: "Your account" }].map((section) => (
             <Link
               key={section.href}
