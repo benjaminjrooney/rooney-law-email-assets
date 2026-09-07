@@ -198,3 +198,63 @@ describe("market share", () => {
     expect(report.rows).toEqual([]);
   });
 });
+
+describe("agents the first pass got wrong", () => {
+  /*
+   * Every name here is a real one from the Illinois file, taken from the top of
+   * the market-share table. The classifier had the four largest law firms in
+   * the state sitting in "Other organization / review", which would have made a
+   * law-firm market-share report worse than no report.
+   */
+  const category = (name: string) => classifyAgent(name).category;
+
+  it.each([
+    "COSTELLO SURY & ROONEY, P.C.",
+    "CERVANTES, CHATT & PRINCE P.C.",
+    "BURKELAW AGENTS, INC.",
+    "SHIFRIN LEGAL, INC.",
+  ])("reads %s as a law firm", (name) => {
+    expect(category(name)).toBe("Law firm");
+  });
+
+  it.each(["KSN REGISTERED AGENT, LLC", "TRESSLER CORPORATE SERVICES, INC."])(
+    "identifies %s by hand, since its name says nothing",
+    (name) => {
+      const result = classifyAgent(name);
+      expect(result.category).toBe("Law firm");
+      // Never presented as settled: these are the ones a person must check.
+      expect(result.confidence).not.toBe("high");
+      expect(result.explanation).toContain("suggestion");
+    },
+  );
+
+  it.each(["LAWRENCE SMITH", "LAWNDALE PROPERTIES INC", "LAWSON MANAGEMENT LLC"])(
+    "does not read %s as a law firm",
+    (name) => {
+      // The reason LAW is matched on a word boundary, and the reason the
+      // run-together pattern needs three letters before it.
+      expect(category(name)).not.toBe("Law firm");
+    },
+  );
+
+  it.each(["AGENT VACATED", "VACANT", "NONE"])(
+    "treats %s as no agent, not as an agent",
+    (name) => {
+      /*
+       * The state writes these to mean there is no registered agent. Left as
+       * organisations they ranked sixth and seventh in the market on 428
+       * associations between them — a competitor of real size that does not
+       * exist.
+       */
+      const result = classifyAgent(name);
+      expect(result.category).toBe("No agent record");
+      expect(result.explanation).toContain("has no registered agent");
+    },
+  );
+
+  it("still refuses a name pulling both ways", () => {
+    const result = classifyAgent("SMITH LAW & PROPERTY MANAGEMENT LLC");
+    expect(result.category).toBe("Other organization / review");
+    expect(result.confidence).toBe("low");
+  });
+});

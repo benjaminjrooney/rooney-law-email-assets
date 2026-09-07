@@ -247,6 +247,20 @@ What this does not cover: a run that never starts. If the cron itself stops
 firing there is nothing to report the failure, and the symptom is again that
 the numbers stop moving. Worth knowing about rather than assuming covered.
 
+### The Market share page
+
+`/market` answers the competitive question the Registered agents page does not:
+who else does this work, is their share moving, and by how much since a fixed
+point. It defaults to law firms and filters to any category.
+
+Three things it always states, because a share without them is a number somebody
+will later have to defend without knowing what it counted: the denominator, the
+date of the state's own files, and whether each category is confirmed or still a
+machine suggestion.
+
+The second table gives every category's total, so the first can be read against
+the whole market rather than in isolation.
+
 ### Measuring change over time
 
 The roster is a photograph of one Friday. An agent's row says what it holds

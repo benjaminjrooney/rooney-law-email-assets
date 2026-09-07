@@ -12,6 +12,7 @@ const SECTIONS = [
   { href: "/", label: "Dashboard" },
   { href: "/associations", label: "Associations" },
   { href: "/agents", label: "Registered agents" },
+  { href: "/market", label: "Market share" },
   { href: "/review", label: "Classification review" },
   { href: "/imports", label: "Imports and updates" },
   { href: "/exports", label: "Exports and backups" },

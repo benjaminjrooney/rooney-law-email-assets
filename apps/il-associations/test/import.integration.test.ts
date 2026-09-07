@@ -196,11 +196,17 @@ describeIfDb("import pipeline against Postgres", () => {
       SELECT grouping_key, association_count, automatic_category, effective_category
       FROM registered_agent_organizations WHERE grouping_key = 'COSTELLO SURY AND ROONEY'`;
     expect(org?.association_count).toBe(2);
-    // The name carries a business-form term (P C) but no law-firm term, so the
-    // automatic pass routes it to review rather than guessing that it is a firm.
-    // This is the workflow working as intended: a human confirms it below.
-    expect(org?.automatic_category).toBe("Other organization / review");
-    expect(org?.effective_category).toBe("Other organization / review");
+    /*
+     * P.C. now reads as a law-firm signal. It did not, and the four largest
+     * law firms in the state sat in "Other organization / review" as a result,
+     * which made a law-firm market-share report worse than none.
+     *
+     * It is still only a suggestion: a P.C. can be a medical or accounting
+     * practice, so this is written to automatic_category and left unreviewed,
+     * and the confirmation below is still a person's to give.
+     */
+    expect(org?.automatic_category).toBe("Law firm");
+    expect(org?.effective_category).toBe("Law firm");
 
     const exact = await sql<{ agent_name_exact: string }[]>`
       SELECT agent_name_exact FROM associations

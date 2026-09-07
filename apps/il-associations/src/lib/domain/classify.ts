@@ -44,8 +44,52 @@ const LAW_TERMS: TermGroup = {
     "\\bATTORNEYS?\\b",
     "\\bLAWYERS?\\b",
     "\\bESQ\\b",
+    /*
+     * Professional-corporation and partnership forms. Not conclusive on their
+     * own — a P.C. can be a medical or accounting practice — which is why a
+     * single law-firm term yields medium confidence and a review flag rather
+     * than an answer.
+     */
+    "\\bP C\\b",
+    "\\bPC\\b",
+    "\\bLLP\\b",
+    "\\bCHTD\\b",
+    "\\bCHARTERED\\b",
+    // BURKELAW, CONDOLAW: the firm's name run together with its trade.
+    "[A-Z]{3,}LAW\\b",
   ],
 };
+
+/**
+ * Agents whose names carry no signal at all, identified by hand.
+ *
+ * The rules above read words. Some of the largest registered agents in this
+ * market are named in a way that says nothing — "KSN REGISTERED AGENT, LLC" is
+ * the agent arm of Kovitz Shifrin Nesbit, and no amount of pattern matching
+ * will get there from the letters K, S and N.
+ *
+ * These are suggestions, not findings. They are written to automatic_category,
+ * never to override_category, so every one still appears in the review queue as
+ * unconfirmed and a person's decision remains a person's decision. The
+ * reasoning travels with each so it can be judged rather than trusted.
+ */
+const KNOWN_AGENTS: { key: string; category: AgentCategory; because: string }[] = [
+  {
+    key: "KSN REGISTERED AGENT",
+    category: "Law firm",
+    because: "the registered-agent arm of Kovitz Shifrin Nesbit, an Illinois community-association law firm",
+  },
+  {
+    key: "TRESSLER CORPORATE SERVICES",
+    category: "Law firm",
+    because: "the corporate-services arm of Tressler LLP, a law firm",
+  },
+  {
+    key: "LP AGENTS",
+    category: "Other organization / review",
+    because: "a commercial registered-agent service rather than a firm; kept in review because the name alone does not establish it",
+  },
+];
 
 const MANAGEMENT_TERMS: TermGroup = {
   label: "management company",
@@ -156,6 +200,34 @@ export function classifyAgent(
   }
 
   const haystack = matchText(trimmed);
+
+  /*
+   * The state writes these in the agent field to mean there is no agent. They
+   * are not organisations, and left alone they rank among the largest "agents"
+   * in the market — 428 associations between them, which would be a competitor
+   * of some size if it existed.
+   */
+  if (/\bAGENT VACATED\b|\bVACANT\b|\bNONE\b/.test(haystack)) {
+    return {
+      category: "No agent record",
+      confidence: "high",
+      explanation:
+        `The agent field reads "${trimmed}", which is the state recording that this entity ` +
+        "has no registered agent, not the name of one.",
+      matchedTerms: [trimmed],
+    };
+  }
+
+  const known = KNOWN_AGENTS.find((entry) => haystack.includes(` ${entry.key} `));
+  if (known) {
+    return {
+      category: known.category,
+      confidence: "medium",
+      explanation: `Identified by hand: ${known.because}. A suggestion, not a confirmation — please review.`,
+      matchedTerms: [known.key],
+    };
+  }
+
   const lawTerms = findTerms(haystack, LAW_TERMS);
   const managementTerms = findTerms(haystack, MANAGEMENT_TERMS);
 
