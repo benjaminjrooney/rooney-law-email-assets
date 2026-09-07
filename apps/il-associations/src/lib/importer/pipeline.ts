@@ -946,6 +946,33 @@ export async function finishFamily(
  * Reset then set, inside one transaction, so an organisation that lost its last
  * association drops to zero rather than keeping a stale count.
  */
+/**
+ * Append this run's standings to the history.
+ *
+ * Called once the counts are settled, so the numbers written are the ones the
+ * application will show. A run that fails writes nothing, which is right: a
+ * half-built roster is not a week's market share.
+ */
+export async function captureAgentShares(
+  sql: Sql,
+  importRunId: number,
+  sourceRunDate: string | null,
+): Promise<number> {
+  const result = await sql`
+    WITH total AS (
+      SELECT count(*)::int AS denominator FROM associations WHERE is_current = true
+    )
+    INSERT INTO agent_share_history
+      (import_run_id, source_run_date, grouping_key, display_name,
+       effective_category, association_count, denominator)
+    SELECT ${importRunId}, ${sourceRunDate}, o.grouping_key,
+           COALESCE(o.display_name, o.canonical_source_name),
+           o.effective_category, o.association_count, total.denominator
+    FROM registered_agent_organizations o, total
+    WHERE o.merged_into_id IS NULL AND o.association_count > 0`;
+  return result.count ?? 0;
+}
+
 export async function refreshAgentCounts(sql: Sql): Promise<void> {
   await sql.begin(async (tx) => {
     await tx`

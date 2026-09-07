@@ -573,6 +573,46 @@ export const exportRuns = pgTable(
   ],
 );
 
+/**
+ * What each agent held, every week, forever.
+ *
+ * The roster is a photograph of one Friday: an agent's row says what it holds
+ * today and nothing about what it held before. Market share moving is the whole
+ * question this database exists to answer, and it cannot be answered from a
+ * table that is overwritten weekly.
+ *
+ * So every write import appends the standings. A share is only meaningful
+ * against its denominator, so that is stored on each row rather than inferred
+ * later from a roster that has since changed.
+ *
+ * Every agent is recorded, including the ones holding a single association. A
+ * cutoff would keep this smaller and would hide exactly the firm that starts at
+ * zero and grows — which, for someone measuring their own new practice, is the
+ * only row that matters at the beginning.
+ */
+export const agentShareHistory = pgTable(
+  "agent_share_history",
+  {
+    id: serial("id").primaryKey(),
+    importRunId: integer("import_run_id")
+      .notNull()
+      .references(() => importRuns.id, { onDelete: "cascade" }),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The Secretary of State's own date for the files, not the import date. */
+    sourceRunDate: date("source_run_date"),
+    groupingKey: text("grouping_key").notNull(),
+    displayName: text("display_name").notNull(),
+    effectiveCategory: text("effective_category").$type<AgentCategory | null>(),
+    associationCount: integer("association_count").notNull(),
+    /** Stored, not derived: the roster it was measured against has moved on. */
+    denominator: integer("denominator").notNull(),
+  },
+  (table) => [
+    index("agent_share_history_agent").on(table.groupingKey, table.capturedAt),
+    index("agent_share_history_run").on(table.importRunId),
+  ],
+);
+
 export const auditLog = pgTable(
   "audit_log",
   {

@@ -27,7 +27,8 @@
     "agents:top": "tsx src/scripts/top-agents.ts",
     "rules:sample": "tsx src/scripts/rule-sample.ts",
     "agents:worklist": "tsx src/scripts/agent-worklist.ts",
-    "backup:decisions": "tsx src/scripts/backup-decisions.ts"
+    "backup:decisions": "tsx src/scripts/backup-decisions.ts",
+    "baseline:mark": "tsx src/scripts/mark-baseline.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

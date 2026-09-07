@@ -30,8 +30,12 @@ class MemoryStorage implements ObjectStorage {
   size(key: string): Promise<number> {
     return Promise.resolve(this.objects.get(key)?.length ?? 0);
   }
-  delete(): Promise<void> {
+  remove(key: string): Promise<void> {
+    this.objects.delete(key);
     return Promise.resolve();
+  }
+  signedUrl(): Promise<string> {
+    return Promise.resolve("https://example.invalid/not-used-in-this-test");
   }
 }
 

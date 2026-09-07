@@ -247,6 +247,30 @@ What this does not cover: a run that never starts. If the cron itself stops
 firing there is nothing to report the failure, and the symptom is again that
 the numbers stop moving. Worth knowing about rather than assuming covered.
 
+### Measuring change over time
+
+The roster is a photograph of one Friday. An agent's row says what it holds
+today and nothing about what it held before, so "market share moved" — the whole
+point — cannot be answered from a table that is overwritten weekly.
+
+Every write import therefore appends the standings to `agent_share_history`:
+each agent, its category, its count, and the denominator it was measured
+against. The denominator is stored rather than derived, because the roster it
+was measured against has moved on by the time anybody asks.
+
+Every agent is recorded, including those holding one association. A cutoff would
+keep the table smaller and would hide exactly the firm that starts at zero and
+grows, which for someone measuring their own new practice is the only row that
+matters at the beginning. It costs roughly 12,000 rows a week.
+
+    npm run baseline:mark -- --note "Rooney Law founded"
+
+marks one set of standings as the fixed point everything later is measured
+against, in `app_settings`. It refuses to overwrite an existing baseline without
+`--force`, because a baseline that moves is not a baseline. It is deliberately
+not "the earliest row in the history": history can be truncated and imports can
+be re-run.
+
 ### What is backed up, and what is not
 
 Nearly everything here regenerates: the roster, the agent groups and the

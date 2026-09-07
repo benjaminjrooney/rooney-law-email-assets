@@ -13,6 +13,7 @@ import { writeAudit } from "@/lib/audit";
 import {
   buildRoster,
   assertRoomToStage,
+  captureAgentShares,
   clearStaging,
   clearStagingForFamily,
   dropAbandonedStaging,
@@ -300,6 +301,19 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
     if (options.mode === "write") {
       report("finishing", "refreshing agent counts");
       await refreshAgentCounts(sql);
+      /*
+       * The bundle's own date, not one family's — the standings are measured
+       * across both, so dating them by whichever family happened to be built
+       * last would be arbitrary.
+       */
+      const bundleRunDate =
+        files
+          .map((file) => file.source_run_date)
+          .filter((value): value is string => value !== null)
+          .sort()
+          .at(-1) ?? null;
+      const captured = await captureAgentShares(sql, importRunId, bundleRunDate);
+      report("finishing", `recorded ${captured.toLocaleString("en-US")} agent standings`);
       await sql`UPDATE source_bundles SET status = 'imported', updated_at = now() WHERE id = ${options.bundleId}`;
     }
     const [errorCount] = await sql<{ n: number }[]>`
