@@ -1022,6 +1022,53 @@ export async function dropAbandonedStaging(sql: Sql, importRunId: number): Promi
   return result.count ?? 0;
 }
 
+/**
+ * Refuse to keep staging when the database is close to filling its volume.
+ *
+ * An import that runs out of disk does not merely fail. Postgres cannot write
+ * its write-ahead log, panics, and then cannot complete recovery on restart
+ * either, because that also needs a few spare megabytes:
+ *
+ *   FATAL: could not write to file "pg_wal/xlogtemp.65": No space left on device
+ *   shutting down due to startup process failure
+ *
+ * A crash-looping database with the application down behind it, recoverable
+ * only by growing the volume or destroying it. That is a wildly
+ * disproportionate outcome for a weekly import of public data, and the
+ * importer is the only thing in a position to prevent it.
+ *
+ * So it stops itself first. A refused import leaves the previous roster intact
+ * and says exactly why; that is a good Friday morning by comparison.
+ *
+ * The ceiling is deliberately well below the volume: the measured peak for a
+ * full import is about 3.8 GB, and Postgres needs room for write-ahead log and
+ * recovery beyond whatever the database itself occupies.
+ */
+export class ImportDiskError extends Error {}
+
+const DEFAULT_CEILING_BYTES = 4_200_000_000;
+
+export function stagingCeilingBytes(): number {
+  const configured = Number(process.env.IMPORT_DB_CEILING_BYTES ?? "");
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_CEILING_BYTES;
+}
+
+/** Throw before staging more, if the database has grown past the ceiling. */
+export async function assertRoomToStage(sql: Sql, what: string): Promise<void> {
+  const ceiling = stagingCeilingBytes();
+  const [row] = await sql<{ bytes: string }[]>`
+    SELECT pg_database_size(current_database())::text AS bytes`;
+  const bytes = Number(row?.bytes ?? 0);
+  if (bytes <= ceiling) return;
+  const gb = (value: number) => `${(value / 1_000_000_000).toFixed(2)} GB`;
+  throw new ImportDiskError(
+    `Stopping before ${what}: the database is ${gb(bytes)}, past the ${gb(ceiling)} ceiling. ` +
+      "Continuing risks filling the volume, which takes Postgres down rather than just this run. " +
+      "The roster still holds the last good data. Free space with `npm run purge:staging -- --all`, " +
+      "or give the volume more room.",
+  );
+}
+
 export async function clearStaging(sql: Sql, importRunId: number): Promise<void> {
   await sql`DELETE FROM staging_records WHERE import_run_id = ${importRunId}`;
   await reclaimStaging(sql);

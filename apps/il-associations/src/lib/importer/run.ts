@@ -12,6 +12,7 @@ import type { ContainerFormat } from "@/lib/ilsos/archive";
 import { writeAudit } from "@/lib/audit";
 import {
   buildRoster,
+  assertRoomToStage,
   clearStaging,
   clearStagingForFamily,
   dropAbandonedStaging,
@@ -225,6 +226,10 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
 
       await sql`UPDATE import_runs SET phase = 'staging' WHERE id = ${importRunId}`;
       for (const file of files.filter((candidate) => candidate.family === family)) {
+        // Checked per file rather than per family: a family is two gigabytes and
+        // a file is a few hundred megabytes, so this is the finest granularity
+        // that costs nothing.
+        await assertRoomToStage(sql, `${file.family}/${file.file_kind}`);
         report("staging", `${file.family}/${file.file_kind} — ${file.original_filename}`);
         const localPath = join(temporaryDirectory, `${file.family}-${file.file_kind}`);
         const storage = getStorage();
