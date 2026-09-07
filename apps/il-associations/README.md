@@ -247,6 +247,33 @@ What this does not cover: a run that never starts. If the cron itself stops
 firing there is nothing to report the failure, and the symptom is again that
 the numbers stop moving. Worth knowing about rather than assuming covered.
 
+### Rebuilding from an empty database
+
+Everything in this database is derived from public files, so losing it costs
+time rather than information. That is worth knowing, because it makes destroying
+the volume a real option when a 5 GB disk gets into a state that cannot be
+recovered in place — as it did.
+
+What does not come back on its own, and has to be restored in this order:
+
+1. **Migrations and reference data** run automatically on the application's next
+   deploy: `npm run db:migrate` is part of its start command, and it seeds the
+   rule set and the six record layouts.
+2. **The administrator account.** Set BOOTSTRAP_ADMIN_EMAIL and
+   BOOTSTRAP_ADMIN_PASSWORD and redeploy; without them the log says
+   `No administrator bootstrap` and there is no way to sign in at all, because
+   the users table went with the volume. Delete the password variable again once
+   somebody has signed in and changed it.
+3. **The scheduled-refresh configuration.** The six source URLs live in
+   `app_settings`, not in code, so they go too and the weekly job then finds
+   nothing to do. `npm run configure:refresh -- --cadence weekly --enable`
+   writes them back.
+4. **The roster**, by running an import.
+
+Operator work — agent merges, category confirmations, overrides — is the only
+thing that cannot be regenerated. There was none at the time of writing. Once
+there is, take a backup bundle before considering this.
+
 ### When the volume is full
 
 An import that dies part way used to leave every staged row behind, and staging
