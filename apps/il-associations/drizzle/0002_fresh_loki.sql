@@ -1,0 +1,1 @@
+ALTER TABLE "inclusion_rule_sets" ADD COLUMN "exclusions" jsonb DEFAULT '[]'::jsonb NOT NULL;

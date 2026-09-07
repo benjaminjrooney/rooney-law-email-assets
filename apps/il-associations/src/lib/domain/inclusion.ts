@@ -30,11 +30,52 @@ export type InclusionRule = {
   description: string;
 };
 
+/**
+ * A name that matches the inclusion rules but is not an association.
+ *
+ * The inclusion rules read a legal name and nothing else, so a business named
+ * after what it serves matches as well as its customers do. "CONDOMINIUM
+ * PROPERTY MANAGEMENT, LLC" carries the word condominium exactly as "GLENDALE
+ * CONDOMINIUM ASSOCIATION" does.
+ *
+ * Every exclusion here is gated by `unlessPatterns`, and in practice that gate
+ * is the association noun. Without it the same rule that removes "BRIARWOOD
+ * TOWNHOME DEVELOPMENT LLC" would also remove "PARK PLACE DEVELOPMENT
+ * CONDOMINIUM ASSOCIATION", which is a real association whose developer's name
+ * stuck. Excluding a genuine association is the worse error of the two: it
+ * disappears silently, and nobody goes looking for a row they cannot see.
+ */
+export type ExclusionRule = {
+  key: string;
+  label: string;
+  /** If any of these match the flattened name … */
+  patterns: string[];
+  /** … and none of these do, the entity is excluded. */
+  unlessPatterns: string[];
+  /**
+   * When set, an `unlessPatterns` match only rescues the name if it appears
+   * AFTER the pattern that would exclude it.
+   *
+   * Position is what separates the two cases, and nothing else does:
+   *
+   *   PARK PLACE DEVELOPMENT CONDOMINIUM ASSOCIATION   developer, then noun
+   *   PINNACLE HOA MANAGEMENT, LLC                     noun, then trade word
+   *
+   * The first is an association carrying its developer's name. The second is a
+   * management company named after what it manages. Both contain a trade word
+   * and an association noun; only the order tells them apart.
+   */
+  unlessAfter?: boolean;
+  description: string;
+};
+
 export type InclusionRuleSet = {
   version: number;
   name: string;
   notes: string;
   rules: InclusionRule[];
+  /** Applied after the rules: a match here removes the entity entirely. */
+  exclusions?: ExclusionRule[];
 };
 
 export type InclusionMatch = {
@@ -147,7 +188,66 @@ export const RULE_SET_V1: InclusionRuleSet = {
         "Generic co-operative businesses are excluded by design.",
     },
   ],
+  exclusions: [
+    {
+      key: "trade_business",
+      label: "Business serving associations",
+      patterns: [
+        "\\bMANAGEMENT\\b",
+        "\\bREALTY\\b",
+        "\\bCONSTRUCTION\\b",
+        "\\bDEVELOPMENT\\b",
+        "\\bINSURANCE\\b",
+        "\\bBROKERAGE\\b",
+        "\\bCONSULTING\\b",
+        "\\bBUILDERS?\\b",
+        "\\bCONTRACTORS?\\b",
+        "\\bROOFING\\b",
+        "\\bPLUMBING\\b",
+        "\\bLANDSCAPING\\b",
+      ],
+      // The association noun is what tells a developer apart from the
+      // association it built and then named after itself.
+      unlessPatterns: [`\\b${ASSOC}\\b`, "\\bHOAS?\\b", "\\bCOOPERATIVES?\\b", "\\bCO OPERATIVES?\\b"],
+      unlessAfter: true,
+      description:
+        "A trade or service word that is not followed by an association noun: a management company, " +
+        "developer, realtor or contractor rather than an association.",
+    },
+    {
+      key: "property_owner_llc",
+      label: "Property-holding company",
+      /*
+       * "<Something> Property Owner, LLC" is the standard naming convention for
+       * a single-purpose entity that holds one building — IRVING PARK STORAGE
+       * PROPERTY OWNER, LLC is a storage facility, not a community. Scoped to
+       * the LLC suffix so that a genuine "… Property Owners Association" is
+       * untouched even before the association-noun gate applies.
+       */
+      patterns: ["\\bPROPERTY OWNERS?\\s+(?:LLC|L L C|INC|INCORPORATED)\\s*$"],
+      unlessPatterns: [`\\b${ASSOC}\\b`, "\\bHOAS?\\b"],
+      description:
+        "A property-holding company using the “Property Owner, LLC” convention, with no association noun.",
+    },
+  ],
 };
+
+/** Where the last of these patterns matches, or -1. */
+function lastIndexOfAny(haystack: string, patterns: RegExp[]): number {
+  let last = -1;
+  for (const pattern of patterns) {
+    // The compiled patterns are not global, so exec finds the first match; the
+    // names here are short enough that scanning forward from it is free.
+    let from = 0;
+    for (;;) {
+      const found = pattern.exec(haystack.slice(from));
+      if (!found) break;
+      last = Math.max(last, from + found.index);
+      from += found.index + Math.max(1, found[0].length);
+    }
+  }
+  return last;
+}
 
 /** Guard against pathological admin-supplied patterns before compiling. */
 const MAX_PATTERN_LENGTH = 200;
@@ -176,6 +276,11 @@ export type CompiledRuleSet = {
     patterns: RegExp[];
     companionPatterns: RegExp[] | null;
   }[];
+  exclusions: {
+    rule: ExclusionRule;
+    patterns: RegExp[];
+    unlessPatterns: RegExp[];
+  }[];
 };
 
 export function compileRuleSet(ruleSet: InclusionRuleSet): CompiledRuleSet {
@@ -188,6 +293,11 @@ export function compileRuleSet(ruleSet: InclusionRuleSet): CompiledRuleSet {
       companionPatterns: rule.companionPatterns
         ? rule.companionPatterns.map(compile)
         : null,
+    })),
+    exclusions: (ruleSet.exclusions ?? []).map((rule) => ({
+      rule,
+      patterns: rule.patterns.map(compile),
+      unlessPatterns: rule.unlessPatterns.map(compile),
     })),
   };
 }
@@ -203,6 +313,23 @@ export function matchInclusionRules(
   compiled: CompiledRuleSet,
 ): InclusionMatch[] {
   const haystack = matchText(legalName);
+
+  /*
+   * Exclusions first, and they are absolute: an excluded name is not in the
+   * roster however many inclusion rules it would otherwise satisfy. Running
+   * them first also means the reason is one thing rather than a set of signals
+   * that then get overruled.
+   */
+  for (const { rule, patterns, unlessPatterns } of compiled.exclusions) {
+    const excludedAt = lastIndexOfAny(haystack, patterns);
+    if (excludedAt === -1) continue;
+    const rescuedAt = lastIndexOfAny(haystack, unlessPatterns);
+    if (rescuedAt === -1) return [];
+    // Without unlessAfter the rescue holds wherever it appears.
+    if (!rule.unlessAfter || rescuedAt > excludedAt) continue;
+    return [];
+  }
+
   const matches: InclusionMatch[] = [];
 
   for (const { rule, patterns, companionPatterns } of compiled.rules) {

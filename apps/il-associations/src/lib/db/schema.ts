@@ -13,7 +13,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { AgentCategory, Classification } from "@/lib/domain/classify";
-import type { InclusionMatch, InclusionRule } from "@/lib/domain/inclusion";
+import type { ExclusionRule, InclusionMatch, InclusionRule } from "@/lib/domain/inclusion";
 import type { EntityFamily, FileKind, LayoutField, HeaderRule } from "@/lib/ilsos/layout";
 
 /**
@@ -110,6 +110,15 @@ export const inclusionRuleSets = pgTable(
     name: text("name").notNull(),
     notes: text("notes").notNull().default(""),
     rules: jsonb("rules").$type<InclusionRule[]>().notNull(),
+    /**
+     * Names that match the rules but are not associations — see ExclusionRule.
+     * Its own column rather than a shape inside `rules`, so an older row keeps
+     * meaning exactly what it meant when it was written.
+     */
+    exclusions: jsonb("exclusions")
+      .$type<ExclusionRule[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     isActive: boolean("is_active").notNull().default(false),
     createdBy: text("created_by"),
     createdAt,

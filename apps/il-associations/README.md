@@ -158,6 +158,33 @@ cleverer import.
 A build reports each of its stages with a duration, so a slow run says where
 the time went rather than sitting silent under one "[building]" line.
 
+### Names the rules match that are not associations
+
+The rules read a legal name and nothing else, so a business named after what it
+serves matches as well as its customers do. Rule Set v1 carries exclusions for
+two shapes:
+
+    CONDOMINIUM PROPERTY MANAGEMENT, LLC     a trade word, no association after it
+    GIBBONS PROPERTY OWNER, LLC              the property-holding SPV convention
+
+Both are gated, and the gate is word order rather than word presence:
+
+    PARK PLACE DEVELOPMENT CONDOMINIUM ASSOCIATION   developer, then the noun — kept
+    PINNACLE HOA MANAGEMENT, LLC                     the noun, then the trade word — dropped
+
+Both names hold a trade word and an association noun. Only the order separates
+an association carrying its developer's name from a company named after what it
+manages, and a rule that ignored order would delete real associations silently —
+the worse error, since nobody goes looking for a row they cannot see.
+
+Commercial, industrial and office condominiums stay in by decision: they carry
+the same statutory duties and can need the same lawyer.
+
+**Editing rules requires bumping the rule set version.** The bundle digest
+covers the files and the rule set version, so a new version applied to files
+already held re-runs properly. Editing a version's rules in place does not
+change the digest, and the re-import will no-op.
+
 ### How much of the roster is still alive
 
 The inclusion rules match on legal name and nothing else, so the roster holds

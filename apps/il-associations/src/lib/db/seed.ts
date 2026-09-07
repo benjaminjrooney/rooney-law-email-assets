@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { RULE_SET_V1 } from "@/lib/domain/inclusion";
 import {
@@ -636,9 +636,25 @@ export async function seedReferenceData(
       name: RULE_SET_V1.name,
       notes: RULE_SET_V1.notes,
       rules: RULE_SET_V1.rules,
+      exclusions: RULE_SET_V1.exclusions ?? [],
       isActive: true,
       createdBy: "system",
     });
+  } else {
+    /*
+     * A rule set already stored is left alone except for its exclusions, which
+     * are new and which an older row cannot have. Rules an operator edited are
+     * theirs; this only fills a column that did not exist when they edited it.
+     */
+    await db
+      .update(inclusionRuleSets)
+      .set({ exclusions: RULE_SET_V1.exclusions ?? [] })
+      .where(
+        and(
+          eq(inclusionRuleSets.version, RULE_SET_V1.version),
+          sql`jsonb_array_length(${inclusionRuleSets.exclusions}) = 0`,
+        ),
+      );
   }
 
   let layoutCount = 0;

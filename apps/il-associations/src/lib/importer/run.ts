@@ -74,18 +74,27 @@ const toLayout = (row: LayoutRow): RecordLayout => ({
 });
 
 /**
- * Digest of the bundle's file hashes.
+ * Digest of the bundle's file hashes and the rules applied to them.
  *
- * Two runs over the same six files produce the same digest, which is what makes
- * a repeat import detectable and a no-op.
+ * Two runs over the same six files under the same rule set produce the same
+ * digest, which is what makes a repeat import detectable and a no-op.
+ *
+ * The rule set is part of it because the roster is a function of both. Without
+ * it, editing the rules and re-importing the same files was silently a no-op —
+ * the whole point of versioned, editable rules is that a new version can be
+ * applied to the data already held, and the digest was quietly preventing it.
  */
-export function bundleDigest(files: { family: string; file_kind: string; sha256: string }[]): string {
+export function bundleDigest(
+  files: { family: string; file_kind: string; sha256: string }[],
+  ruleSetVersion?: number,
+): string {
   const hash = createHash("sha256");
   for (const file of [...files].sort((a, b) =>
     `${a.family}/${a.file_kind}`.localeCompare(`${b.family}/${b.file_kind}`),
   )) {
     hash.update(`${file.family}/${file.file_kind}/${file.sha256}|`);
   }
+  if (ruleSetVersion !== undefined) hash.update(`ruleset/${ruleSetVersion}`);
   return hash.digest("hex");
 }
 
@@ -136,8 +145,10 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
     }
   }
 
-  const [ruleSet] = await sql<{ id: number; version: number; rules: unknown; name: string; notes: string }[]>`
-    SELECT id, version, rules, name, notes FROM inclusion_rule_sets
+  const [ruleSet] = await sql<
+    { id: number; version: number; rules: unknown; exclusions: unknown; name: string; notes: string }[]
+  >`
+    SELECT id, version, rules, exclusions, name, notes FROM inclusion_rule_sets
     WHERE is_active = true ORDER BY version DESC LIMIT 1`;
   if (!ruleSet) {
     throw new ImportPreconditionError("No active inclusion rule set. Activate one before importing.");
@@ -159,7 +170,7 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
     }
   }
 
-  const digest = bundleDigest(files);
+  const digest = bundleDigest(files, ruleSet.version);
 
   if (options.mode === "write" && !options.resumeRunId) {
     const [prior] = await sql<{ id: number; counts: ImportCounts | null }[]>`
@@ -253,6 +264,7 @@ export async function runImport(options: RunImportOptions): Promise<RunImportRes
           name: ruleSet.name,
           notes: ruleSet.notes,
           rules: ruleSet.rules as never,
+          exclusions: ruleSet.exclusions as never,
         },
         family,
         sourceRunDate,
