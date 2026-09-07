@@ -132,18 +132,18 @@ export function FilterBar({
           Include archived entities
         </label>
         <label
-          className="flex items-center gap-2 text-xs text-ink-400"
-          title="Available once a documented status-code mapping exists."
+          className="flex items-center gap-2 text-xs text-ink-600"
+          title="The roster matches on legal name alone, so it holds every association that ever existed. About a third are dissolved."
         >
           <input
             type="checkbox"
-            name="activeOnly"
-            value="1"
-            defaultChecked={filters.activeOnly}
+            name="standing"
+            value="all"
+            defaultChecked={filters.standing === "all"}
             disabled={!statusMappingAvailable}
             className="rounded border-ink-300"
           />
-          Active only (status codes not yet mapped)
+          Include dissolved and revoked entities
         </label>
         <div className="flex gap-2">
           <Button type="submit" size="sm">

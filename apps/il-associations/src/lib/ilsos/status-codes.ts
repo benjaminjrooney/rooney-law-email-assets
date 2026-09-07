@@ -28,27 +28,40 @@ export type StatusCode = {
    * the two documents establish it differently, and neither is our judgement.
    */
   isGoodStanding: boolean;
+  /**
+   * Whether the default view counts this entity.
+   *
+   * True where the state still lists the entity as registered — in good
+   * standing, or registered and delinquent. False for every code that means it
+   * is wound up, merged, withdrawn, revoked or expired.
+   *
+   * This is not the same question as good standing, and the difference is the
+   * point: an LLC marked NGS still exists and may still need a lawyer, while a
+   * corporation dissolved in 1994 does not. Of the 34,076 entities the name
+   * rules match, 10,862 are in the second group.
+   */
+  countsAsCurrent: boolean;
 };
 
 const CORP_STATUS: StatusCode[] = [
-  { code: "00", label: "Goodstanding", isGoodStanding: true },
-  { code: "01", label: "Reinstated", isGoodStanding: true },
-  { code: "02", label: "Intent to dissolve", isGoodStanding: true },
-  { code: "03", label: "Bankruptcy", isGoodStanding: false },
-  { code: "04", label: "Unacceptable payment", isGoodStanding: false },
-  { code: "05", label: "Agent vacated", isGoodStanding: false },
-  { code: "06", label: "Withdrawn", isGoodStanding: false },
-  { code: "07", label: "Revoked", isGoodStanding: false },
-  { code: "08", label: "Dissolved", isGoodStanding: false },
-  { code: "09", label: "Merged/Consolidated", isGoodStanding: false },
-  { code: "10", label: "Registered name expiration", isGoodStanding: false },
-  { code: "11", label: "Expired", isGoodStanding: false },
-  { code: "12", label: "Registered name cancellation", isGoodStanding: false },
-  { code: "13", label: "Special Act Corporation", isGoodStanding: false },
-  { code: "14", label: "Administratively Dissolved", isGoodStanding: false },
-  { code: "15", label: "Converted", isGoodStanding: false },
-  { code: "16", label: "Redomisticated", isGoodStanding: false },
-  { code: "17", label: "Ag-Coop", isGoodStanding: false },
+  { code: "00", label: "Goodstanding", isGoodStanding: true, countsAsCurrent: true },
+  { code: "01", label: "Reinstated", isGoodStanding: true, countsAsCurrent: true },
+  { code: "02", label: "Intent to dissolve", isGoodStanding: true, countsAsCurrent: true },
+  { code: "03", label: "Bankruptcy", isGoodStanding: false, countsAsCurrent: false },
+  { code: "04", label: "Unacceptable payment", isGoodStanding: false, countsAsCurrent: false },
+  { code: "05", label: "Agent vacated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "06", label: "Withdrawn", isGoodStanding: false, countsAsCurrent: false },
+  { code: "07", label: "Revoked", isGoodStanding: false, countsAsCurrent: false },
+  { code: "08", label: "Dissolved", isGoodStanding: false, countsAsCurrent: false },
+  { code: "09", label: "Merged/Consolidated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "10", label: "Registered name expiration", isGoodStanding: false, countsAsCurrent: false },
+  { code: "11", label: "Expired", isGoodStanding: false, countsAsCurrent: false },
+  { code: "12", label: "Registered name cancellation", isGoodStanding: false, countsAsCurrent: false },
+  { code: "13", label: "Special Act Corporation", isGoodStanding: false, countsAsCurrent: false },
+  { code: "14", label: "Administratively Dissolved", isGoodStanding: false, countsAsCurrent: false },
+  { code: "15", label: "Converted", isGoodStanding: false, countsAsCurrent: false },
+  { code: "16", label: "Redomisticated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "17", label: "Ag-Coop", isGoodStanding: false, countsAsCurrent: false },
 ];
 
 /**
@@ -65,21 +78,23 @@ const CORP_STATUS: StatusCode[] = [
  * terminal, transferred or held state.
  */
 const LLC_STATUS: StatusCode[] = [
-  { code: "00", label: "Goodstanding", isGoodStanding: true },
-  { code: "01", label: "Reinstated", isGoodStanding: true },
-  { code: "02", label: "NGS (not in good standing)", isGoodStanding: false },
-  { code: "03", label: "Domesticated", isGoodStanding: false },
-  { code: "04", label: "Converted", isGoodStanding: false },
-  { code: "05", label: "Agent Vacated", isGoodStanding: false },
-  { code: "06", label: "Withdrawn", isGoodStanding: false },
-  { code: "07", label: "Revoked", isGoodStanding: false },
-  { code: "08", label: "Voluntary Dissolution/Terminated", isGoodStanding: false },
-  { code: "09", label: "Involuntary Dissolution", isGoodStanding: false },
-  { code: "10", label: "Merged", isGoodStanding: false },
-  { code: "11", label: "Administratively Dissolved", isGoodStanding: false },
-  { code: "12", label: "Void", isGoodStanding: false },
-  { code: "13", label: "Bankruptcy", isGoodStanding: false },
-  { code: "14", label: "Hold", isGoodStanding: false },
+  { code: "00", label: "Goodstanding", isGoodStanding: true, countsAsCurrent: true },
+  { code: "01", label: "Reinstated", isGoodStanding: true, countsAsCurrent: true },
+  // Registered and delinquent, not wound up. The one code where countsAsCurrent
+  // and isGoodStanding deliberately disagree.
+  { code: "02", label: "NGS (not in good standing)", isGoodStanding: false, countsAsCurrent: true },
+  { code: "03", label: "Domesticated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "04", label: "Converted", isGoodStanding: false, countsAsCurrent: false },
+  { code: "05", label: "Agent Vacated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "06", label: "Withdrawn", isGoodStanding: false, countsAsCurrent: false },
+  { code: "07", label: "Revoked", isGoodStanding: false, countsAsCurrent: false },
+  { code: "08", label: "Voluntary Dissolution/Terminated", isGoodStanding: false, countsAsCurrent: false },
+  { code: "09", label: "Involuntary Dissolution", isGoodStanding: false, countsAsCurrent: false },
+  { code: "10", label: "Merged", isGoodStanding: false, countsAsCurrent: false },
+  { code: "11", label: "Administratively Dissolved", isGoodStanding: false, countsAsCurrent: false },
+  { code: "12", label: "Void", isGoodStanding: false, countsAsCurrent: false },
+  { code: "13", label: "Bankruptcy", isGoodStanding: false, countsAsCurrent: false },
+  { code: "14", label: "Hold", isGoodStanding: false, countsAsCurrent: false },
 ];
 
 const BY_FAMILY: Partial<Record<EntityFamily, StatusCode[]>> = {
@@ -95,6 +110,20 @@ export const LLC_STATUS_CITATION =
 /** Every status code known for a family, for the filter UI. */
 export function statusCodesFor(family: EntityFamily): StatusCode[] {
   return BY_FAMILY[family] ?? [];
+}
+
+/**
+ * The codes the default view keeps for a family.
+ *
+ * Corporations and LLCs arrive at the same three codes by different routes,
+ * which is why this is derived from the tables rather than written out: the
+ * corporation document's own rule makes 00, 01 and 02 good standing, while for
+ * an LLC 02 is NGS and is kept because a delinquent association is still an
+ * association. Should either document add a code, the tables change and this
+ * follows.
+ */
+export function currentStatusCodes(family: EntityFamily): string[] {
+  return (BY_FAMILY[family] ?? []).filter((entry) => entry.countsAsCurrent).map((e) => e.code);
 }
 
 /** True when a family has a documented status table at all. */

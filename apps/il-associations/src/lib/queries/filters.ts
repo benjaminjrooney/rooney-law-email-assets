@@ -1,6 +1,7 @@
 import type { PendingQuery, Row, Sql } from "postgres";
 import { AGENT_CATEGORIES, type AgentCategory } from "@/lib/domain/classify";
 import { ENTITY_FAMILIES, type EntityFamily } from "@/lib/ilsos/layout";
+import { currentStatusCodes, hasStatusMapping } from "@/lib/ilsos/status-codes";
 
 /**
  * Filter state shared by the Associations table, the dashboard, the agent
@@ -11,6 +12,8 @@ import { ENTITY_FAMILIES, type EntityFamily } from "@/lib/ilsos/layout";
  */
 
 export type ClassificationMode = "automatic" | "effective";
+
+export type StandingFilter = "current" | "all";
 
 export type Filters = {
   /** Free-text search over the normalised legal name. */
@@ -27,10 +30,20 @@ export type Filters = {
   statusCode: string | null;
   sourceRunDate: string | null;
   /**
-   * Only meaningful once status codes are mapped; until then the UI disables it
-   * and this stays false.
+   * Which entities count.
+   *
+   * `current` — the default — keeps entities the state still lists as
+   * registered, in good standing or not, and drops the dissolved, merged,
+   * withdrawn and revoked. `all` keeps everything.
+   *
+   * The default is not `all` because the inclusion rules match on legal name
+   * alone: every association that ever existed is in the roster, and a third of
+   * them no longer do. Counting those in a market share would overstate the
+   * denominator by ten thousand entities that cannot instruct anybody.
+   *
+   * Nothing is deleted either way — this is a view, and `all` restores it.
    */
-  activeOnly: boolean;
+  standing: StandingFilter;
   /** Whether categories come from the automatic pass or from reviewed overrides. */
   mode: ClassificationMode;
   /** Include archived (no longer in the newest bundle) entities. */
@@ -48,7 +61,7 @@ export const defaultFilters = (): Filters => ({
   reviewed: null,
   statusCode: null,
   sourceRunDate: null,
-  activeOnly: false,
+  standing: "current",
   mode: "effective",
   includeArchived: false,
 });
@@ -81,7 +94,9 @@ export function parseFilters(params: Record<string, string | string[] | undefine
     reviewed: reviewed === "yes" || reviewed === "no" ? reviewed : null,
     statusCode: asString(params.status),
     sourceRunDate: asString(params.runDate),
-    activeOnly: asString(params.activeOnly) === "1",
+    // Anything but an explicit "all" means the default, so a malformed or
+    // truncated link narrows rather than silently widening the roster.
+    standing: asString(params.standing) === "all" ? "all" : "current",
     mode: mode === "automatic" ? "automatic" : "effective",
     includeArchived: asString(params.archived) === "1",
   };
@@ -103,7 +118,7 @@ export function filtersToSearchParams(filters: Filters): URLSearchParams {
   set("reviewed", filters.reviewed);
   set("status", filters.statusCode);
   set("runDate", filters.sourceRunDate);
-  if (filters.activeOnly) params.set("activeOnly", "1");
+  if (filters.standing === "all") params.set("standing", "all");
   if (filters.includeArchived) params.set("archived", "1");
   if (filters.mode !== "effective") params.set("mode", filters.mode);
   return params;
@@ -122,9 +137,13 @@ export function describeFilters(filters: Filters): string[] {
   if (filters.reviewed) parts.push(filters.reviewed === "yes" ? "reviewed only" : "unreviewed only");
   if (filters.statusCode) parts.push(`status code ${filters.statusCode}`);
   if (filters.sourceRunDate) parts.push(`source run date ${filters.sourceRunDate}`);
-  if (filters.activeOnly) parts.push("active only");
+  parts.push(
+    filters.standing === "all"
+      ? "every status, including dissolved"
+      : "registered entities only (good standing or not)",
+  );
   if (filters.includeArchived) parts.push("including archived");
-  return parts.length > 0 ? parts : ["no filters — the full qualifying roster"];
+  return parts;
 }
 
 /**
@@ -158,10 +177,37 @@ export function buildWhere(sql: Sql, filters: Filters): PendingQuery<Row[]> | nu
   }
   if (filters.statusCode) conditions.push(sql`a.status_code_raw = ${filters.statusCode}`);
   if (filters.sourceRunDate) conditions.push(sql`a.source_run_date = ${filters.sourceRunDate}`);
-  if (filters.activeOnly) {
-    // Only applies once a status mapping exists; otherwise it would silently
-    // drop every row, since no status code has a documented meaning yet.
-    conditions.push(sql`a.status_is_mapped = true`);
+  if (filters.standing === "current") {
+    /*
+     * Per family, because the two documents number their codes differently —
+     * 02 is "Intent to dissolve" for a corporation and "NGS" for an LLC. One
+     * shared list would quietly keep the wrong entities.
+     *
+     * A row whose own code is not in the documented table is kept, and so is a
+     * whole family that has no table yet. An unmapped code is an unknown, not a
+     * dissolution — the same reason resolveStatus reports good standing as null
+     * rather than false. Hiding an association because the state used a code
+     * nobody has transcribed would lose it silently, which is the one outcome
+     * worse than showing a dead one.
+     */
+    const perFamily = ENTITY_FAMILIES.filter((family) => hasStatusMapping(family)).map(
+      (family) =>
+        sql`(a.entity_family = ${family} AND (a.status_code_raw = ANY(${currentStatusCodes(family)})
+             OR a.status_is_mapped = false))`,
+    );
+    const unmappedFamilies = ENTITY_FAMILIES.filter((family) => !hasStatusMapping(family)).map(
+      (family) => sql`a.entity_family = ${family}`,
+    );
+    const branches = [...perFamily, ...unmappedFamilies];
+    if (branches.length > 0) {
+      const anyFamily = branches.reduce((accumulated, branch, index) =>
+        index === 0 ? branch : sql`${accumulated} OR ${branch}`,
+      );
+      // Parenthesised, because conditions are joined with AND and `X AND a OR b`
+      // parses as `(X AND a) OR b` — which would return the whole of family b
+      // regardless of every other filter on the page.
+      conditions.push(sql`(${anyFamily})`);
+    }
   }
   if (filters.category) {
     if (filters.category === "No agent record") {

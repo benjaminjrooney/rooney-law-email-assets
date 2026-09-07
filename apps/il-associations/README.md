@@ -177,6 +177,16 @@ associations are there", and the second question is the one people ask.
 
 `npm run status:breakdown` prints the full table by status code, per family.
 
+**The default view keeps registered entities only** — in good standing or not —
+and drops the dissolved, merged, withdrawn and revoked. So the figure on screen
+is 23,124, not 34,076. Nothing is deleted; "Include dissolved and revoked
+entities" on the filter bar restores the full roster, and every figure is
+labelled with which set produced it.
+
+This matters most to market share, whose denominator is the filter set. Counting
+ten thousand dissolved associations would understate every agent's share against
+a market that cannot instruct anybody.
+
 Two things worth knowing before filtering on status:
 
 The families define delinquency differently. An LLC has an explicit NGS code
