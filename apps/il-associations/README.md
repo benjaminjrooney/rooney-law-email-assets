@@ -261,6 +261,24 @@ machine suggestion.
 The second table gives every category's total, so the first can be read against
 the whole market rather than in isolation.
 
+### Changing the classifier
+
+Categories are decided during an import and then sit still. A re-import will not
+redo them either: the digest covers the files and the rule set, and the
+classifier is neither. So improving the rules changes nothing at all until:
+
+    npm run agents:reclassify
+
+which recomputes every agent's automatic category in seconds, against the twenty
+minutes a re-import costs to arrive at the same roster. Only
+`automatic_category` is touched — a category somebody confirmed lives in
+`override_category`, and `effective_category` is generated as the override
+falling back to the automatic, so a confirmed decision keeps winning.
+
+Run it before marking a baseline. A baseline is permanent, and freezing a stale
+category into it makes every later comparison wrong in a way nobody thinks to
+question.
+
 ### Measuring change over time
 
 The roster is a photograph of one Friday. An agent's row says what it holds
