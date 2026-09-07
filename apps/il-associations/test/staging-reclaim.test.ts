@@ -83,3 +83,32 @@ describe("scratch left by earlier runs", () => {
     expect(calls.some((call) => call.includes("VACUUM"))).toBe(true);
   });
 });
+
+describe("a run that was killed rather than finished", () => {
+  it("is treated as abandoned once it is older than any import could be", () => {
+    /*
+     * A deploy landing on a running import kills the container outright: the
+     * finally never runs, so the rows stay and the status stays "running"
+     * forever. Leaving those alone — which the rule above does deliberately —
+     * meant the next run stacked on top and filled a 5 GB volume. A live run is
+     * never ninety minutes old; a dead one always ends up that way.
+     */
+    const { sql, calls } = connectionWhere(/never/);
+    void dropAbandonedStaging(sql, 9);
+    const update = calls.find((call) => call.startsWith("UPDATE import_runs"));
+    expect(update).toBeDefined();
+    expect(update).toContain("status = 'failed'");
+    expect(update).toContain("minutes");
+    // Never the run doing the clearing.
+    expect(update).toContain("id <> ?");
+  });
+
+  it("marks it failed before deleting, so the delete can see it", async () => {
+    const { sql, calls } = connectionWhere(/never/);
+    await dropAbandonedStaging(sql, 9);
+    const update = calls.findIndex((call) => call.startsWith("UPDATE import_runs"));
+    const del = calls.findIndex((call) => call.startsWith("DELETE FROM staging_records"));
+    expect(update).toBeGreaterThanOrEqual(0);
+    expect(del).toBeGreaterThan(update);
+  });
+});

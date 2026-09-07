@@ -976,13 +976,38 @@ export async function refreshAgentCounts(sql: Sql): Promise<void> {
  * against a clean table took over forty against one carrying a dead run's
  * leavings — same data, same query.
  *
- * Runs still marked running are left alone. One may genuinely be live, and no
- * import gets to decide that another one is not.
+ * Runs still marked running are left alone, up to a point. One may genuinely be
+ * live and no import gets to decide otherwise — but a run killed mid-import
+ * never reaches its own cleanup, and leaves both its rows and its "running"
+ * status behind forever. That is not hypothetical: a deploy landed on a running
+ * import, the container was killed outright, and the next run stacked two
+ * million rows on top of the abandoned ones and filled a 5 GB volume.
+ *
+ * So a run is treated as abandoned once it has been running far longer than any
+ * import takes. A full import of all six files is about seventeen minutes; the
+ * threshold below is five times that, which no live run will ever cross and any
+ * dead one will.
  */
+const STALE_RUN_MINUTES = 90;
 export async function dropAbandonedStaging(sql: Sql, importRunId: number): Promise<number> {
   // The row count comes from the command tag. RETURNING would make the server
   // marshal every deleted row back to us, which is how the first version of the
   // purge command took the database down.
+  /*
+   * Mark the dead ones dead first, so the delete below sees them and so they
+   * stop being offered as resumable. A run still inside its window is
+   * untouched.
+   */
+  await sql`
+    UPDATE import_runs
+    SET status = 'failed', finished_at = now(),
+        error_message = COALESCE(error_message,
+          'Marked failed: still running after ' || ${STALE_RUN_MINUTES}::text ||
+          ' minutes, which is longer than any import takes.')
+    WHERE status = 'running'
+      AND id <> ${importRunId}
+      AND COALESCE(started_at, created_at) < now() - (${STALE_RUN_MINUTES}::text || ' minutes')::interval`;
+
   const result = await sql`
     DELETE FROM staging_records
     WHERE import_run_id <> ${importRunId}
