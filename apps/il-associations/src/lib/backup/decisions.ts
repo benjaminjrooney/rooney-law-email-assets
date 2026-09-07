@@ -50,12 +50,24 @@ export async function backupDecisions(): Promise<{ storageKey: string; byteSize:
   // No password hashes: a backup should restore who had access, not their
   // credentials. Bootstrap recreates an administrator; the rest are re-invited.
   const users = await sql`SELECT id, email, display_name, role, is_active, created_at FROM users`;
+  /*
+   * The standings are a measurement of a moment. Next week's files differ, so a
+   * week that is lost cannot be recomputed from anything — it is as
+   * irreplaceable as a review decision, and more so for the baseline week,
+   * which every later comparison is measured against.
+   */
+  const shareHistory = await sql`
+    SELECT import_run_id, captured_at, source_run_date, grouping_key, display_name,
+           effective_category, association_count, denominator
+    FROM agent_share_history ORDER BY captured_at, id`;
 
   const bundle = {
     takenAt: new Date().toISOString(),
     note:
-      "Operator decisions only. The roster, agent groups and automatic categories are " +
-      "derived from the ILSOS files and a rule set; re-import rather than restore them.",
+      "Operator decisions and the weekly standings. The roster, agent groups and automatic " +
+      "categories are derived from the ILSOS files and a rule set; re-import rather than " +
+      "restore those. The standings are not derived from anything still obtainable — each is " +
+      "a measurement of one week, and next week's files differ.",
     counts: {
       agentsWithDecisions: agents.length,
       reviews: reviews.length,
@@ -64,6 +76,7 @@ export async function backupDecisions(): Promise<{ storageKey: string; byteSize:
       settings: settings.length,
       auditEntries: audit.length,
       users: users.length,
+      shareHistoryRows: shareHistory.length,
     },
     agents,
     reviews,
@@ -72,6 +85,7 @@ export async function backupDecisions(): Promise<{ storageKey: string; byteSize:
     settings,
     audit,
     users,
+    shareHistory,
   };
 
   const body = Buffer.from(JSON.stringify(bundle, null, 2), "utf8");
