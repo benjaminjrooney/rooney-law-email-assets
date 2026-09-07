@@ -16,6 +16,7 @@ import {
   type RecordLayout,
 } from "@/lib/ilsos/layout";
 import { resolveStatus } from "@/lib/ilsos/status-codes";
+import { defaultFilters, whereClause } from "@/lib/queries/filters";
 import { extractFields, readRecords } from "@/lib/ilsos/parser";
 import { openSourceStream, type ContainerFormat } from "@/lib/ilsos/archive";
 import { UNMAPPED_STATUS_LABEL } from "@/lib/db/schema";
@@ -958,18 +959,40 @@ export async function captureAgentShares(
   importRunId: number,
   sourceRunDate: string | null,
 ): Promise<number> {
+  /*
+   * Measured against the default view, not against every row in the table.
+   *
+   * The first version counted the whole roster — 33,811, including ten thousand
+   * dissolved corporations — while the Market share page counts the 23,015 the
+   * application actually shows. Same question, two answers, and the one written
+   * into a permanent baseline was the wrong one: it put the largest firm in the
+   * state at 7.64% instead of 11.22%.
+   *
+   * So the filter comes from defaultFilters and the clause from whereClause,
+   * the same two the page uses. One definition of the market, or eventually two
+   * numbers and an argument about which is right.
+   */
+  const where = whereClause(sql, defaultFilters());
   const result = await sql`
-    WITH total AS (
-      SELECT count(*)::int AS denominator FROM associations WHERE is_current = true
-    )
+    WITH scoped AS (
+      SELECT a.agent_organization_id AS org_id
+      FROM associations a
+      LEFT JOIN registered_agent_organizations o ON o.id = a.agent_organization_id
+      ${where}
+    ),
+    total AS (SELECT count(*)::int AS denominator FROM scoped)
     INSERT INTO agent_share_history
       (import_run_id, source_run_date, grouping_key, display_name,
        effective_category, association_count, denominator)
     SELECT ${importRunId}, ${sourceRunDate}, o.grouping_key,
            COALESCE(o.display_name, o.canonical_source_name),
-           o.effective_category, o.association_count, total.denominator
-    FROM registered_agent_organizations o, total
-    WHERE o.merged_into_id IS NULL AND o.association_count > 0`;
+           o.effective_category, count(*)::int, total.denominator
+    FROM scoped s
+    JOIN registered_agent_organizations o ON o.id = s.org_id
+    CROSS JOIN total
+    WHERE o.merged_into_id IS NULL
+    GROUP BY o.grouping_key, o.display_name, o.canonical_source_name,
+             o.effective_category, total.denominator`;
   return result.count ?? 0;
 }
 
