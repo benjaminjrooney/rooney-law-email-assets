@@ -24,7 +24,8 @@
     "configure:refresh": "tsx src/scripts/configure-refresh.ts",
     "purge:staging": "tsx src/scripts/purge-staging.ts",
     "status:breakdown": "tsx src/scripts/status-breakdown.ts",
-    "agents:top": "tsx src/scripts/top-agents.ts"
+    "agents:top": "tsx src/scripts/top-agents.ts",
+    "rules:sample": "tsx src/scripts/rule-sample.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
