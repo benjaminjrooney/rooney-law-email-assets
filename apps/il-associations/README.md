@@ -158,6 +158,36 @@ cleverer import.
 A build reports each of its stages with a duration, so a slow run says where
 the time went rather than sitting silent under one "[building]" line.
 
+### How much of the roster is still alive
+
+The inclusion rules match on legal name and nothing else, so the roster holds
+every entity that ever matched. Measured on the first complete import:
+
+| | Total matched | In good standing | Dissolved or wound up |
+|---|---|---|---|
+| Corporations (cdx) | 32,297 | 22,355 | 9,908 |
+| LLCs (llc) | 1,779 | 725 | 954 |
+| **Both** | **34,076** | **23,080** | **10,862** |
+
+So roughly a third of the roster is entities that no longer exist — mostly
+9,751 dissolved corporations. That is by design: the import keeps them and the
+interface filters them, rather than throwing away history at import time. But
+34,076 is the answer to "how many records ever matched", not "how many
+associations are there", and the second question is the one people ask.
+
+`npm run status:breakdown` prints the full table by status code, per family.
+
+Two things worth knowing before filtering on status:
+
+The families define delinquency differently. An LLC has an explicit NGS code
+(02, 44 records). A corporation has no such code — its live-but-delinquent
+state is Revoked (07), and there are only 23 of those, far fewer than the
+"missed annual report" intuition suggests.
+
+Agent vacated (cdx 05, 11 records) means the entity still exists and currently
+has no registered agent. Small, and probably the most interesting rows in the
+table for anyone studying agents.
+
 ### Being told when it fails
 
 The weekly job runs on a Friday morning with nobody watching, and a failed run
