@@ -141,7 +141,7 @@ export default async function UsersPage() {
                         placeholder="New password"
                         className="w-52"
                         required
-                        minLength={12}
+                       
                       />
                     </ActionForm>
                   </div>
@@ -177,7 +177,7 @@ export default async function UsersPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={12}
+               
               />
             </Field>
           </ActionForm>

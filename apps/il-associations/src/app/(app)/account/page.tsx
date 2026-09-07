@@ -42,7 +42,7 @@ export default async function AccountPage() {
       <Card>
         <CardHeader
           title="Change your password"
-          description="At least 12 characters, with upper and lower case and a digit. Changing it ends every other signed-in session."
+          description="Upper and lower case and a digit. Changing it ends every other signed-in session."
         />
         <CardBody>
           <ActionForm action={changeOwnPassword} submitLabel="Change password">
@@ -50,10 +50,10 @@ export default async function AccountPage() {
               <Input name="currentPassword" type="password" autoComplete="current-password" required />
             </Field>
             <Field label="New password">
-              <Input name="newPassword" type="password" autoComplete="new-password" required minLength={12} />
+              <Input name="newPassword" type="password" autoComplete="new-password" required />
             </Field>
             <Field label="Confirm new password">
-              <Input name="confirmPassword" type="password" autoComplete="new-password" required minLength={12} />
+              <Input name="confirmPassword" type="password" autoComplete="new-password" required />
             </Field>
           </ActionForm>
         </CardBody>

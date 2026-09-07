@@ -25,7 +25,16 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
 /** Minimum password policy for seeded, changed and reset passwords. */
 export function passwordProblems(plain: string): string[] {
   const problems: string[] = [];
-  if (plain.length < 12) problems.push("Password must be at least 12 characters.");
+  /*
+   * No minimum length. There was a twelve-character rule; Ben asked for it gone
+   * and it is his application, used by him on a phone. The remaining rules are
+   * the ones he did not ask about.
+   *
+   * An empty password is still refused, because it is not a weak password but a
+   * broken account: the bootstrap skips entirely on an empty value, so allowing
+   * one here would create a user nobody could ever sign in as.
+   */
+  if (plain === "") problems.push("Password must not be empty.");
   if (!/[a-z]/.test(plain) || !/[A-Z]/.test(plain)) {
     problems.push("Password must contain both upper and lower case letters.");
   }

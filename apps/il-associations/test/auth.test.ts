@@ -6,8 +6,16 @@ describe("password policy", () => {
     expect(passwordProblems("CorrectHorse123Battery")).toEqual([]);
   });
 
-  it("requires at least 12 characters", () => {
-    expect(passwordProblems("Ab1cdef")).toContain("Password must be at least 12 characters.");
+  it("no longer imposes a minimum length", () => {
+    // Removed at Ben's request: his application, used by him, on a phone.
+    expect(passwordProblems("Ab1")).toEqual([]);
+    expect(passwordProblems("Ab1cdef")).toEqual([]);
+  });
+
+  it("still refuses an empty password, which is a broken account not a weak one", () => {
+    // The bootstrap skips entirely on an empty value, so a user created with
+    // one could never be signed in as.
+    expect(passwordProblems("")).toContain("Password must not be empty.");
   });
 
   it("requires both cases", () => {
@@ -24,8 +32,9 @@ describe("password policy", () => {
   });
 
   it("reports every failure at once rather than one at a time", () => {
-    // Three separate complaints, so the person fixing it sees the whole rule.
-    expect(passwordProblems("short")).toHaveLength(3);
+    // Both remaining complaints together, so the person fixing it sees the
+    // whole rule rather than discovering it one rejection at a time.
+    expect(passwordProblems("short")).toHaveLength(2);
   });
 
   it("counts characters, not bytes, and accepts a passphrase", () => {
