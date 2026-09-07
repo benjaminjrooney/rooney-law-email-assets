@@ -50,9 +50,18 @@ async function main(): Promise<void> {
 
   // Capture again rather than pointing at the run's own rows: those are one
   // week of an ongoing series, and the baseline should survive their deletion.
+  //
+  // --force re-captures rather than reusing what is there. The first reason to
+  // force is that the recorded standings are wrong, and keeping the rows would
+  // rewrite the label on the same bad numbers.
   const [already] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM agent_share_history WHERE import_run_id = ${run.id}`;
-  if ((already?.n ?? 0) === 0) {
+  if (force && (already?.n ?? 0) > 0) {
+    const dropped = await sql`
+      DELETE FROM agent_share_history WHERE import_run_id = ${run.id}`;
+    console.log(`Re-capturing: dropped ${dropped.count} stale standings for run #${run.id}.`);
+  }
+  if (force || (already?.n ?? 0) === 0) {
     await captureAgentShares(sql, run.id, run.source_run_date);
   }
 
