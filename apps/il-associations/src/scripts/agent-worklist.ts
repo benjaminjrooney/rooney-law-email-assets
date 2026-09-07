@@ -1,6 +1,6 @@
 import { closeDb, getSql } from "@/lib/db";
 import { denominatorFor } from "@/lib/queries/agents";
-import { defaultFilters } from "@/lib/queries/filters";
+import { defaultFilters, whereClause } from "@/lib/queries/filters";
 
 /**
  * The decisions that would most improve the market-share figures, in order.
@@ -27,6 +27,22 @@ import { defaultFilters } from "@/lib/queries/filters";
  */
 const MIN_COUNT = 10;
 
+/**
+ * Per-agent counts measured the way every other figure here is measured.
+ *
+ * `registered_agent_organizations.association_count` counts every current row,
+ * dissolved entities included, while the denominator beside it counts only the
+ * default view. Mixing the two put the largest firm in the state at 11.22% when
+ * the application said 10.90%. A fresh fragment per query, because one is
+ * consumed by the statement it is embedded in.
+ */
+const scopedCounts = (sql: ReturnType<typeof getSql>) => sql`
+  SELECT a.agent_organization_id AS id, count(*)::int AS n
+  FROM associations a
+  LEFT JOIN registered_agent_organizations o ON o.id = a.agent_organization_id
+  ${whereClause(sql, defaultFilters())}
+  GROUP BY a.agent_organization_id`;
+
 async function main(): Promise<void> {
   const sql = getSql();
   const denominator = await denominatorFor(defaultFilters());
@@ -42,11 +58,13 @@ async function main(): Promise<void> {
   const merges = await sql<
     { a_name: string; a_count: number; b_name: string; b_count: number }[]
   >`
-    WITH sized AS (
-      SELECT id, grouping_key, COALESCE(display_name, canonical_source_name) AS name,
-             association_count, string_to_array(grouping_key, ' ') AS words
-      FROM registered_agent_organizations
-      WHERE merged_into_id IS NULL AND association_count >= ${MIN_COUNT}
+    WITH counts AS (${scopedCounts(sql)}),
+    sized AS (
+      SELECT o.id, o.grouping_key, COALESCE(o.display_name, o.canonical_source_name) AS name,
+             c.n AS association_count, string_to_array(o.grouping_key, ' ') AS words
+      FROM registered_agent_organizations o
+      JOIN counts c ON c.id = o.id
+      WHERE o.merged_into_id IS NULL AND c.n >= ${MIN_COUNT}
     )
     SELECT a.name AS a_name, a.association_count AS a_count,
            b.name AS b_name, b.association_count AS b_count
@@ -73,14 +91,18 @@ async function main(): Promise<void> {
   const unclassified = await sql<
     { name: string; association_count: number; category: string | null; confidence: string | null }[]
   >`
-    SELECT COALESCE(display_name, canonical_source_name) AS name, association_count,
-           COALESCE(effective_category, automatic_category) AS category, automatic_confidence AS confidence
-    FROM registered_agent_organizations
-    WHERE merged_into_id IS NULL AND reviewed_at IS NULL
-      AND (effective_category IS NULL
-        OR effective_category = 'Other organization / review'
-        OR automatic_confidence <> 'high')
-    ORDER BY association_count DESC
+    WITH counts AS (${scopedCounts(sql)})
+    SELECT COALESCE(o.display_name, o.canonical_source_name) AS name,
+           c.n AS association_count,
+           COALESCE(o.effective_category, o.automatic_category) AS category,
+           o.automatic_confidence AS confidence
+    FROM registered_agent_organizations o
+    JOIN counts c ON c.id = o.id
+    WHERE o.merged_into_id IS NULL AND o.reviewed_at IS NULL
+      AND (o.effective_category IS NULL
+        OR o.effective_category = 'Other organization / review'
+        OR o.automatic_confidence <> 'high')
+    ORDER BY c.n DESC
     LIMIT 25`;
 
   console.log("\n\nNEEDING A CATEGORY — largest first");
@@ -93,10 +115,12 @@ async function main(): Promise<void> {
   }
 
   const [covered] = await sql<{ n: number }[]>`
-    SELECT COALESCE(sum(association_count), 0)::int AS n
-    FROM registered_agent_organizations
-    WHERE merged_into_id IS NULL AND reviewed_at IS NULL
-      AND (effective_category IS NULL OR effective_category = 'Other organization / review')`;
+    WITH counts AS (${scopedCounts(sql)})
+    SELECT COALESCE(sum(c.n), 0)::int AS n
+    FROM registered_agent_organizations o
+    JOIN counts c ON c.id = o.id
+    WHERE o.merged_into_id IS NULL AND o.reviewed_at IS NULL
+      AND (o.effective_category IS NULL OR o.effective_category = 'Other organization / review')`;
   console.log(
     `\n${covered?.n.toLocaleString("en-US")} associations (${pct(covered?.n ?? 0)}) sit with an agent ` +
       "that has no confirmed category.",
