@@ -8,6 +8,7 @@ import { fetchSourceFileToDisk } from "@/lib/importer/fetch-url";
 import { ingestSourceFile } from "@/lib/importer/ingest";
 import { ENTITY_FAMILIES, FILE_KINDS, type EntityFamily } from "@/lib/ilsos/layout";
 import { alertChannels, alertRefreshFailure } from "@/lib/alerts";
+import { backupDecisions } from "@/lib/backup/decisions";
 
 type Sources = Partial<Record<string, string>>;
 
@@ -167,6 +168,24 @@ async function main(): Promise<void> {
 }
 
 async function importBundle(bundleId: number, label: string): Promise<void> {
+  /*
+   * Back up the operator decisions before importing, not after. An import that
+   * goes wrong is the event a backup exists for, and one taken afterwards would
+   * already carry whatever it did.
+   *
+   * It cannot stop the import. A weekly refresh that refuses to run because
+   * object storage was briefly unavailable would trade a real job for a
+   * precaution, so a failure here is reported and the import proceeds.
+   */
+  try {
+    await backupDecisions();
+  } catch (error) {
+    console.error(
+      "Could not back up operator decisions before importing:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
   console.log(`Importing bundle #${bundleId} — ${label} …`);
   const result = await runImport({
     bundleId,

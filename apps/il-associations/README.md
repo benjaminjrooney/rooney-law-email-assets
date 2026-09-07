@@ -247,6 +247,35 @@ What this does not cover: a run that never starts. If the cron itself stops
 firing there is nothing to report the failure, and the symptom is again that
 the numbers stop moving. Worth knowing about rather than assuming covered.
 
+### What is backed up, and what is not
+
+Nearly everything here regenerates: the roster, the agent groups and the
+automatic categories are functions of six public files and a rule set. Losing
+them costs an import. That is not a guess — the volume filled, the database was
+destroyed, and rebuilding cost half an hour.
+
+It cost only half an hour because nobody had reviewed anything yet. A decision
+that two agents are one person, or that a firm is a law firm rather than
+"other", exists nowhere else and cannot be recomputed. Those are what
+`npm run backup:decisions` writes to object storage, and what the weekly refresh
+now writes before every import:
+
+| Backed up | Not backed up |
+|---|---|
+| Agents with an override, review or manual name | The roster |
+| The review trail and confirmed aliases | Agent groups and automatic categories |
+| Rule sets, including edited ones | Staging and import history |
+| `app_settings`, with the six source URLs | Password hashes |
+| The audit log, and who had access | |
+
+Before the import rather than after, because a bad import is the event a backup
+exists for. It cannot stop the import either: a refresh that refused to run
+because object storage blinked would trade a real job for a precaution, so a
+failed backup is reported and the import proceeds.
+
+Object storage, never the database volume — the volume filling is the failure
+this exists to survive.
+
 ### Rebuilding from an empty database
 
 Everything in this database is derived from public files, so losing it costs
