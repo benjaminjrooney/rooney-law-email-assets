@@ -131,7 +131,11 @@ the same exclusions the task pane passes, and only reshapes the answer.
   `{ name, company?, line1, line2?, city, state, zip }`, and `Cache-Control:
   no-store`. An address missing any of name, street, city, state or ZIP is left
   out rather than half-filled; a company-only addressee is sent as `name`;
-  `mailClass` appears only when the letter states one.
+  `mailClass` appears only when the letter states one. PLEJ mails every CC at
+  the one class chosen for the send, so a CC the letter sends only by email,
+  fax or hand is left out; a CC with a postal class of its own is kept.
+- The body is read only after the token is checked, and a body that cannot be
+  decoded is a `4xx`, never a `500`.
 - Neither the text nor anything read from it is logged.
 
 PLEJ keeps a PDF's visual lines in its extracted text for this (PLEJ decision
