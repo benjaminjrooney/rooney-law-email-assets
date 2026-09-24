@@ -12,6 +12,7 @@ import { configProblems } from './config.js';
 import { EventStore } from './event-store.js';
 import { verifyWebhook } from './webhook.js';
 import { estimateLetterCost, sumEstimates } from './pricing.js';
+import { MAX_PARSE_TEXT_CHARS, parseForPlej } from './parse.js';
 import {
   MAIL_CLASSES,
   ADDRESS_PLACEMENTS,
@@ -94,7 +95,12 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   // The webhook signature covers the exact bytes Lob sent, so this route needs
   // the raw body. Mounted first: body-parser skips a request already parsed.
   app.use('/webhooks/lob', express.raw({ type: '*/*', limit: '1mb' }));
-  app.use(express.json({ limit: '256kb' }));
+  // /api/parse carries letter text, so its body is read only once the token
+  // has been checked (its own parser is mounted on the route, after `guard`).
+  const jsonBody = express.json({ limit: '256kb' });
+  // Compared the way Express routes: case-insensitively, trailing slash ignored.
+  const isParseRoute = (req) => req.path.toLowerCase().replace(/\/+$/, '') === '/api/parse';
+  app.use((req, res, next) => (isParseRoute(req) ? next() : jsonBody(req, res, next)));
 
   const guard = requireApiToken(config);
 
@@ -390,6 +396,32 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
     }
   });
 
+  // ----------------------------------------------------------------- parse --
+
+  /**
+   * Read the recipient block out of a letter's extracted text, for PLEJ's
+   * mailing dialog to pre-fill. The text is hostile input: its size is bounded
+   * here, and neither it nor anything read from it is logged. See parse.js.
+   */
+  // 64 KB holds 8,000 characters even with every one `\uXXXX`-escaped.
+  app.post('/api/parse', guard, express.json({ limit: '64kb' }), (req, res, next) => {
+    try {
+      const text = req.body?.text;
+      if (typeof text !== 'string') {
+        return res.status(400).json({ error: { message: 'Field "text" must be a string.' } });
+      }
+      if (text.length > MAX_PARSE_TEXT_CHARS) {
+        return res.status(413).json({
+          error: { message: `Text is longer than the ${MAX_PARSE_TEXT_CHARS}-character limit.` },
+        });
+      }
+      res.set('Cache-Control', 'no-store');
+      return res.json(parseForPlej(text, config.returnAddress));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // ------------------------------------------------------------- addresses --
 
   /** Check one address against USPS data without creating a letter. */
@@ -487,6 +519,32 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   app.use((error, req, res, _next) => {
     if (error instanceof LobError) {
       return res.status(error.statusCode).json({ error: { message: error.message, code: error.lobCode } });
+    }
+    // A body the JSON parser refused. Its message quotes the start of the body
+    // (`Unexpected token 'D', "Dear Ms. S"... is not valid JSON`), and the body
+    // may be a letter, so only the kind of failure is logged.
+    // Any other body the parser could not decode -- an unsupported encoding or
+    // charset, or bytes that are not the gzip they claim -- is the client's
+    // mistake too, and is answered the same way rather than as a 500 with a
+    // stack in the log.
+    const bodyRefused =
+      typeof error?.type === 'string' &&
+      error.expose === true &&
+      Number.isInteger(error.status) &&
+      error.status >= 400 &&
+      error.status < 500;
+    const badCompression = typeof error?.code === 'string' && error.code.startsWith('Z_');
+    if (bodyRefused || badCompression) {
+      const type = bodyRefused ? error.type : 'encoding.invalid';
+      log('request.rejected', { path: req.path, type });
+      const status = bodyRefused ? error.status : 400;
+      const message =
+        type === 'entity.too.large'
+          ? 'Request body is too large.'
+          : type === 'entity.parse.failed'
+            ? 'Request body is not valid JSON.'
+            : 'Request body could not be read.';
+      return res.status(status).json({ error: { message } });
     }
     if (error?.code === 'LIMIT_FILE_SIZE') {
       const mb = Math.round(config.limits.maxFileBytes / (1024 * 1024));

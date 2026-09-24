@@ -117,6 +117,32 @@ mailed as its own physical letter** with the same PDF, at its own mail class, an
 is charged separately. A CC named without an address (`cc: Client`) appears
 unchecked with a warning rather than being dropped silently.
 
+## The same rules, over HTTP, for PLEJ
+
+`POST /api/parse` runs this parser for PLEJ's mailing dialog, which pre-fills
+its form from a filed PDF's extracted text. There is one copy of the rules:
+`apps/backend/src/parse.js` calls `parseLetter` from the add-in's own file with
+the same exclusions the task pane passes, and only reshapes the answer.
+
+- **Auth:** the same `API_TOKEN` bearer as `/api/letters`.
+- **Request:** JSON `{ "text": "..." }`, at most 8,000 characters (PLEJ sends
+  at most 4,000). Longer is `413`; a missing or non-string `text` is `400`.
+- **Reply:** `{ recipient?, cc: [], mailClass?, subject? }`, each address
+  `{ name, company?, line1, line2?, city, state, zip }`, and `Cache-Control:
+  no-store`. An address missing any of name, street, city, state or ZIP is left
+  out rather than half-filled; a company-only addressee is sent as `name`;
+  `mailClass` appears only when the letter states one. PLEJ mails every CC at
+  the one class chosen for the send, so a CC the letter sends only by email,
+  fax or hand is left out; a CC with a postal class of its own is kept.
+- The body is read only after the token is checked, and a body that cannot be
+  decoded is a `4xx`, never a `500`.
+- Neither the text nor anything read from it is logged.
+
+PLEJ keeps a PDF's visual lines in its extracted text for this (PLEJ decision
+M-14). In a PDF the letterhead is part of the page rather than a Word header,
+so the firm's own `RETURN_*` address is what keeps it from being read as the
+recipient when no delivery line sits between them.
+
 ## When extraction misses
 
 Fix it in the task pane and send — the parse is only a starting point. If a
