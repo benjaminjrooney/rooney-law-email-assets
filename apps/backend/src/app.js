@@ -12,6 +12,7 @@ import { configProblems } from './config.js';
 import { EventStore } from './event-store.js';
 import { verifyWebhook } from './webhook.js';
 import { estimateLetterCost, sumEstimates } from './pricing.js';
+import { MAX_PARSE_TEXT_CHARS, parseForPlej } from './parse.js';
 import {
   MAIL_CLASSES,
   ADDRESS_PLACEMENTS,
@@ -390,6 +391,31 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
     }
   });
 
+  // ----------------------------------------------------------------- parse --
+
+  /**
+   * Read the recipient block out of a letter's extracted text, for PLEJ's
+   * mailing dialog to pre-fill. The text is hostile input: its size is bounded
+   * here, and neither it nor anything read from it is logged. See parse.js.
+   */
+  app.post('/api/parse', guard, (req, res, next) => {
+    try {
+      const text = req.body?.text;
+      if (typeof text !== 'string') {
+        return res.status(400).json({ error: { message: 'Field "text" must be a string.' } });
+      }
+      if (text.length > MAX_PARSE_TEXT_CHARS) {
+        return res.status(413).json({
+          error: { message: `Text is longer than the ${MAX_PARSE_TEXT_CHARS}-character limit.` },
+        });
+      }
+      res.set('Cache-Control', 'no-store');
+      return res.json(parseForPlej(text, config.returnAddress));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // ------------------------------------------------------------- addresses --
 
   /** Check one address against USPS data without creating a letter. */
@@ -487,6 +513,16 @@ export function createApp({ config, lobClient, rateLimiter, eventStore } = {}) {
   app.use((error, req, res, _next) => {
     if (error instanceof LobError) {
       return res.status(error.statusCode).json({ error: { message: error.message, code: error.lobCode } });
+    }
+    // A body the JSON parser refused. Its message quotes the start of the body
+    // (`Unexpected token 'D', "Dear Ms. S"... is not valid JSON`), and the body
+    // may be a letter, so only the kind of failure is logged.
+    if (error?.type === 'entity.parse.failed' || error?.type === 'entity.too.large') {
+      log('request.rejected', { path: req.path, type: error.type });
+      const tooLarge = error.type === 'entity.too.large';
+      return res
+        .status(tooLarge ? 413 : 400)
+        .json({ error: { message: tooLarge ? 'Request body is too large.' : 'Request body is not valid JSON.' } });
     }
     if (error?.code === 'LIMIT_FILE_SIZE') {
       const mb = Math.round(config.limits.maxFileBytes / (1024 * 1024));
