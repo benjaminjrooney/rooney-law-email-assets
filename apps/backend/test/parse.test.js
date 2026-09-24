@@ -189,6 +189,82 @@ test('a CC with no address is left out rather than half-filled', async () => {
   });
 });
 
+test('a CC the letter sends only by email is not suggested as a mailing', async () => {
+  // PLEJ mails every CC it is given, at the one class chosen for the send.
+  // A copy the letter says goes by email alone would otherwise be pre-filled
+  // as a paid physical letter.
+  const text = [
+    ...FILED_PDF_TEXT.split('\ncc:')[0].split('\n'),
+    'cc: Robin Example (via email only)',
+    '9 Sample Court',
+    'Othertown, IL 60002',
+    'Pat Other (via regular mail)',
+    '1 Oak Street',
+    'Peoria, IL 61602',
+  ].join('\n');
+  await withServer(async (server) => {
+    const { body } = await postText(server, text);
+    // Positive control: the copy the letter does post is still suggested.
+    assert.deepEqual(
+      body.cc.map((entry) => entry.name),
+      ['Pat Other'],
+    );
+  });
+});
+
+test('a recipient block missing a required field is left out', async () => {
+  const unreadable = FILED_PDF_TEXT.replace('Springfield, Illinois 62700', 'Springfield, Ill. 62700');
+  await withServer(async (server) => {
+    const { body } = await postText(server, unreadable);
+    assert.equal('recipient' in body, false);
+    // Positive control: the same letter with a state the parser knows is read.
+    assert.equal((await postText(server, FILED_PDF_TEXT)).body.recipient.name, 'Dana Sample');
+  });
+});
+
+test('an unauthenticated request is refused before its body is read', async () => {
+  await withServer(async (server) => {
+    const reply = await server.post('/api/parse', {
+      body: 'not json at all',
+      headers: { 'Content-Type': 'application/json' },
+      token: null,
+    });
+    assert.equal(reply.status, 401);
+    // Express matches routes case-insensitively and ignores a trailing slash;
+    // the body is still read only after the token is checked.
+    for (const path of ['/API/Parse', '/api/parse/']) {
+      const other = await server.post(path, {
+        body: 'not json at all',
+        headers: { 'Content-Type': 'application/json' },
+        token: null,
+      });
+      assert.equal(other.status, 401, path);
+    }
+  });
+});
+
+test('a body that cannot be decoded is a client error, logged without a stack', async () => {
+  await withServer(async (server) => {
+    const output = await captureStdout(async () => {
+      for (const headers of [
+        { 'Content-Encoding': 'gzip' },
+        { 'Content-Encoding': 'br' },
+        { 'Content-Type': 'application/json; charset=ebcdic' },
+      ]) {
+        const reply = await server.post('/api/parse', {
+          body: 'Zyxwvut not encoded',
+          headers: { 'Content-Type': 'application/json', ...headers },
+        });
+        assert.ok(reply.status >= 400 && reply.status < 500, `${JSON.stringify(headers)}: ${reply.status}`);
+      }
+    });
+    assert.ok(!output.includes('"stack"'), 'a stack trace reached the log');
+    assert.ok(!output.includes('Zyxwvut'), 'part of the body reached the log');
+    // Positive control: the refusals were logged, so the capture saw them.
+    assert.match(output, /request\.rejected/);
+  });
+});
+
 test('the reply is never cached', async () => {
   await withServer(async (server) => {
     const response = await fetch(`${server.base}/api/parse`, {

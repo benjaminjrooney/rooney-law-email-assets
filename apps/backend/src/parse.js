@@ -24,7 +24,7 @@ import { parseLetter } from '../../word-addin/public/js/parse-letter.js';
  * The most text one request may carry. PLEJ sends at most 4,000 characters,
  * and a recipient block sits in the first 500. The parser's line patterns are
  * quadratic at worst on one long line of short words, so this ceiling is also
- * the time bound: about 35 ms at 8,000 characters, measured.
+ * the time bound: under about 100 ms at 8,000 characters, measured.
  */
 export const MAX_PARSE_TEXT_CHARS = 8_000;
 
@@ -73,7 +73,15 @@ export function parseForPlej(text, returnAddress) {
   });
 
   const recipient = toPlejAddress(parsed.recipient);
-  const cc = parsed.cc.map(toPlejAddress).filter(Boolean);
+  // PLEJ mails every CC it is given, at the one class chosen for the whole
+  // send. A copy the letter sends only by email, fax or hand is therefore left
+  // out rather than suggested as a paid physical letter. A copy with a postal
+  // class of its own is kept; PLEJ mails it at the send's class, which the
+  // lawyer confirms.
+  const cc = parsed.cc
+    .filter((entry) => entry.mailClassDetected || entry.otherMethods.length === 0)
+    .map(toPlejAddress)
+    .filter(Boolean);
   const subject = present(parsed.subject);
 
   return {
