@@ -28,6 +28,46 @@ import { parseLetter } from '../../word-addin/public/js/parse-letter.js';
  */
 export const MAX_PARSE_TEXT_CHARS = 8_000;
 
+const letterCount = (value) => (String(value ?? '').match(/[A-Za-z]/g) || []).length;
+const digitCount = (value) => (String(value ?? '').match(/\d/g) || []).length;
+const PO_BOX = /^\s*(p\.?\s?o\.?\s+box|post\s+office\s+box)\s+\d/i;
+const UNIT_LINE = /^(suite|ste\.?|apt\.?|apartment|unit|floor|fl\.?|room|rm\.?|building|bldg\.?|#\s?\w|no\.?\s?\w)/i;
+const CARE_OF = /(^|\s)(c\/o|care\s+of)(\s|$)/i;
+const DANGLING_CONJUNCTION = /(\s(and|&)$)|(^(and|&)\s)/i;
+
+/**
+ * Checks every address must pass before PLEJ may pre-fill it. Ben tolerates a
+ * blank, never a wrong address, so each rule rejects the whole candidate
+ * (the answer becomes "nothing") rather than repairing it. `address` is the
+ * parser's answer, including `rawBlock`, the lines it was read from.
+ * Each rule has an id so the tests can switch one off and show what breaks.
+ */
+export const ADDRESS_RULES = [
+  // A street with no letters ("48217") is a stray number, not a street.
+  { id: 'street-has-letter', test: (a) => letterCount(a.address_line1) > 0 },
+  // A street (or second line) that is mostly digits is a stray numeric string.
+  {
+    id: 'street-mostly-digits',
+    test: (a) =>
+      [a.address_line1, a.address_line2].every(
+        (line) => !line || PO_BOX.test(line) || digitCount(line) <= letterCount(line),
+      ),
+  },
+  // Any line of the block that is only digits/punctuation means the block was
+  // broken up by the PDF layout (wrapped street, page number); do not guess.
+  { id: 'no-letterless-line', test: (a) => (a.rawBlock ?? []).every((line) => letterCount(line) > 0) },
+  // PLEJ has no c/o field, and the parser used to put the c/o line in the
+  // name. A c/o block is therefore left blank for the lawyer to type.
+  { id: 'no-care-of', test: (a) => (a.rawBlock ?? []).every((line) => !CARE_OF.test(line)) },
+  // Line 1 of a US street address starts with a number, or is a P.O. box.
+  // (The parser takes the line above the city when it sees no street.)
+  { id: 'street-starts-with-number-or-box', test: (a) => /^\d/.test(a.address_line1 ?? '') || PO_BOX.test(a.address_line1 ?? '') },
+  // A second street line must be a unit ("Suite 200"), not half a wrapped street.
+  { id: 'line2-is-a-unit', test: (a) => !a.address_line2 || UNIT_LINE.test(a.address_line2.trim()) },
+  // "Dana Sample and" / "Robin Example": a two-line name is not person + company.
+  { id: 'no-dangling-conjunction', test: (a) => (a.rawBlock ?? []).every((line) => !DANGLING_CONJUNCTION.test(line.trim())) },
+];
+
 function present(value) {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
@@ -37,8 +77,9 @@ function present(value) {
  * field PLEJ requires is missing — PLEJ would discard it anyway, and a
  * half-filled address shown as "read from the letter" is worse than none.
  */
-function toPlejAddress(address) {
+function toPlejAddress(address, rules = ADDRESS_RULES) {
   if (!address) return undefined;
+  if (!rules.every((rule) => rule.test(address))) return undefined;
   const person = present(address.name);
   const company = present(address.company);
   // PLEJ requires a name. A letter addressed to a company alone names the
@@ -66,13 +107,13 @@ function toPlejAddress(address) {
  * @param {string} text the document's extracted text
  * @param {object} returnAddress `config.returnAddress`
  */
-export function parseForPlej(text, returnAddress) {
+export function parseForPlej(text, returnAddress, rules = ADDRESS_RULES) {
   const parsed = parseLetter(text, {
     excludeLine1: returnAddress?.address_line1,
     excludeCompany: returnAddress?.company || returnAddress?.name,
   });
 
-  const recipient = toPlejAddress(parsed.recipient);
+  const recipient = toPlejAddress(parsed.recipient, rules);
   // PLEJ mails every CC it is given, at the one class chosen for the whole
   // send. A copy the letter sends only by email, fax or hand is therefore left
   // out rather than suggested as a paid physical letter. A copy with a postal
@@ -80,7 +121,7 @@ export function parseForPlej(text, returnAddress) {
   // lawyer confirms.
   const cc = parsed.cc
     .filter((entry) => entry.mailClassDetected || entry.otherMethods.length === 0)
-    .map(toPlejAddress)
+    .map((entry) => toPlejAddress(entry, rules))
     .filter(Boolean);
   const subject = present(parsed.subject);
 
