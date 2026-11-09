@@ -18,7 +18,7 @@
  * from it to the log.
  */
 
-import { parseLetter } from '../../word-addin/public/js/parse-letter.js';
+import { parseLetter, toLines } from '../../word-addin/public/js/parse-letter.js';
 
 /**
  * The most text one request may carry. PLEJ sends at most 4,000 characters,
@@ -31,7 +31,14 @@ export const MAX_PARSE_TEXT_CHARS = 8_000;
 const letterCount = (value) => (String(value ?? '').match(/[A-Za-z]/g) || []).length;
 const digitCount = (value) => (String(value ?? '').match(/\d/g) || []).length;
 const PO_BOX = /^\s*(p\.?\s?o\.?\s+box|post\s+office\s+box)\s+\d/i;
-const UNIT_LINE = /^(suite|ste\.?|apt\.?|apartment|unit|floor|fl\.?|room|rm\.?|building|bldg\.?|#\s?\w|no\.?\s?\w)/i;
+const UNIT_LINE =
+  /^((suite|ste|apt|apartment|unit|floor|fl|room|rm|building|bldg)\b\.?\s*#?\s*([A-Za-z]?\d[\w-]*|[A-Za-z])|(#|no\.?)\s*[A-Za-z]?\d[\w-]*)$/i;
+const STREET_WORD =
+  /\b(street|st|avenue|ave|boulevard|blvd|road|rd|drive|dr|lane|ln|court|ct|circle|cir|place|pl|plaza|parkway|pkwy|highway|hwy|route|rte|terrace|trail|way|square|sq)\b\.?/i;
+const ORGANIZATION_WORD =
+  /\b(llc|l\.l\.c|inc|corp|corporation|company|co|ltd|lp|llp|p\.c|pc|associates|partners|group|firm|bank|trust|insurance|holdings|stores|department|university)\b\.?/i;
+const PO_BOX_ANYWHERE = /\b(p\.?\s?o\.?\s*box|post\s+office\s+box)\b/i;
+const CC_MARKER = /^\s*(cc|c\.c\.|ccs|copy\s+to|copies\s+to)\s*([:\uFF1A]|$)/i;
 const CARE_OF = /(^|\s)(c\/o|care\s+of)(\s|$)/i;
 const DANGLING_CONJUNCTION = /(\s(and|&)$)|(^(and|&)\s)/i;
 
@@ -62,6 +69,36 @@ export const ADDRESS_RULES = [
   // Line 1 of a US street address starts with a number, or is a P.O. box.
   // (The parser takes the line above the city when it sees no street.)
   { id: 'street-starts-with-number-or-box', test: (a) => /^\d/.test(a.address_line1 ?? '') || PO_BOX.test(a.address_line1 ?? '') },
+  // Line 1 is a street: a number AND a street word (or a P.O. box), never an
+  // organization ("7 Eleven Stores Inc"), a date ("2 September 2026") or a title.
+  {
+    id: 'street-has-street-word-no-org',
+    test: (a) => {
+      const line1 = a.address_line1 ?? '';
+      if (PO_BOX.test(line1)) return true;
+      return STREET_WORD.test(line1) && !ORGANIZATION_WORD.test(line1);
+    },
+  },
+  // "PO Box 4410 100 Example Avenue" is two addresses glued together.
+  {
+    id: 'po-box-not-fused',
+    test: (a) => !PO_BOX_ANYWHERE.test(a.address_line1 ?? '') || (PO_BOX.test(a.address_line1) && !STREET_WORD.test(a.address_line1)),
+  },
+  // A city is a short run of words. Digits, commas or "Re:" mean the line is
+  // something else that happened to end in "ST 12345".
+  {
+    id: 'city-is-clean',
+    test: (a) => /^[A-Za-z][A-Za-z .'-]{0,29}$/.test(a.address_city ?? '') && (a.address_city.match(/\S+/g) || []).length <= 4,
+  },
+  { id: 'zip-not-zeros', test: (a) => !/^0{5}/.test(a.address_zip ?? '') },
+  // Two address blocks that are not the firm's own before the salutation (a
+  // second firm's letterhead, a cc block) mean we cannot tell the addressee.
+  { id: 'single-candidate', test: (a, ctx) => !ctx || ctx.candidates === 1 },
+  // Nothing at or after a "cc:" line is the addressee.
+  {
+    id: 'no-cc-above',
+    test: (a, ctx) => !ctx || !ctx.lines.slice(0, ctx.cityIndex).some((line) => CC_MARKER.test(line)),
+  },
   // A second street line must be a unit ("Suite 200"), not half a wrapped street.
   { id: 'line2-is-a-unit', test: (a) => !a.address_line2 || UNIT_LINE.test(a.address_line2.trim()) },
   // "Dana Sample and" / "Robin Example": a two-line name is not person + company.
@@ -77,9 +114,9 @@ function present(value) {
  * field PLEJ requires is missing — PLEJ would discard it anyway, and a
  * half-filled address shown as "read from the letter" is worse than none.
  */
-function toPlejAddress(address, rules = ADDRESS_RULES) {
+function toPlejAddress(address, rules = ADDRESS_RULES, ctx) {
   if (!address) return undefined;
-  if (!rules.every((rule) => rule.test(address))) return undefined;
+  if (!rules.every((rule) => rule.test(address, ctx))) return undefined;
   const person = present(address.name);
   const company = present(address.company);
   // PLEJ requires a name. A letter addressed to a company alone names the
@@ -113,7 +150,11 @@ export function parseForPlej(text, returnAddress, rules = ADDRESS_RULES) {
     excludeCompany: returnAddress?.company || returnAddress?.name,
   });
 
-  const recipient = toPlejAddress(parsed.recipient, rules);
+  const recipient = toPlejAddress(parsed.recipient, rules, {
+    candidates: parsed.recipientCandidates,
+    cityIndex: parsed.recipientCityIndex,
+    lines: toLines(text),
+  });
   // PLEJ mails every CC it is given, at the one class chosen for the whole
   // send. A copy the letter sends only by email, fax or hand is therefore left
   // out rather than suggested as a paid physical letter. A copy with a postal
