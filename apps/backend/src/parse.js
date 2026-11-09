@@ -18,7 +18,7 @@
  * from it to the log.
  */
 
-import { parseLetter, toLines } from '../../word-addin/public/js/parse-letter.js';
+import { parseLetter, toLines, STATE_NAMES } from '../../word-addin/public/js/parse-letter.js';
 
 /**
  * The most text one request may carry. PLEJ sends at most 4,000 characters,
@@ -89,6 +89,15 @@ export const ADDRESS_RULES = [
   {
     id: 'city-is-clean',
     test: (a) => /^[A-Za-z][A-Za-z .'-]{0,29}$/.test(a.address_city ?? '') && (a.address_city.match(/\S+/g) || []).length <= 4,
+  },
+  // "Springfield Illinois, IL" has the state glued onto the city. Only the END
+  // is checked, so Kansas City and Washington Court House stay valid.
+  {
+    id: 'city-not-ending-in-state',
+    test: (a) => {
+      const words = String(a.address_city ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      return !(words.length > 1 && [1, 2].some((n) => words.length > n && STATE_NAMES[words.slice(-n).join(' ')]));
+    },
   },
   { id: 'zip-not-zeros', test: (a) => !/^0{5}/.test(a.address_zip ?? '') },
   // Two address blocks that are not the firm's own before the salutation (a

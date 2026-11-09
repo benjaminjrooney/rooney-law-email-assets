@@ -67,7 +67,7 @@ const STATE_ABBREVIATIONS = new Set([
   'VI', 'WA', 'WV', 'WI', 'WY',
 ]);
 
-const STATE_NAMES = {
+export const STATE_NAMES = {
   alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO',
   connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA',
   hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA', kansas: 'KS',

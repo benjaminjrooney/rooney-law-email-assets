@@ -315,6 +315,26 @@ export const CASES = [
     correct: null,
   },
   {
+    id: 'city whose last word is a state name (Springfield Illinois, IL)',
+    text: letter(['Dana Sample', '100 Example Avenue', 'Springfield Illinois, IL 62700']),
+    correct: null,
+  },
+  {
+    id: 'city whose last words are a two-word state name',
+    text: letter(['Dana Sample', '100 Example Avenue', 'Springfield New York, NY 12345']),
+    correct: null,
+  },
+  {
+    id: 'city names that merely contain a state word stay correct (Kansas City, Oklahoma City)',
+    text: letter(['Dana Sample', '100 Example Avenue', 'Kansas City, Missouri 64106']),
+    correct: { name: 'Dana Sample', line1: '100 Example Avenue', city: 'Kansas City', state: 'MO', zip: '64106' },
+  },
+  {
+    id: 'city starting with a state word stays correct (Washington Court House)',
+    text: letter(['Dana Sample', '100 Example Avenue', 'Washington Court House, OH 43160']),
+    correct: { name: 'Dana Sample', line1: '100 Example Avenue', city: 'Washington Court House', state: 'OH', zip: '43160' },
+  },
+  {
     id: 'ZIP 00000',
     text: letter(['Dana Sample', '100 Example Avenue', 'Springfield, IL 00000']),
     correct: null,
@@ -435,6 +455,7 @@ const MUTATIONS = [
   { name: 'street-has-street-word-no-org', remove: ['street-has-street-word-no-org'], mustGoRed: 'date line starting with a number is not a street' },
   { name: 'po-box-not-fused', remove: ['po-box-not-fused'], mustGoRed: 'PO Box fused to a street on one line (street first)' },
   { name: 'city-is-clean', remove: ['city-is-clean'], mustGoRed: 'polluted city line (floor text inside the city)' },
+  { name: 'city-not-ending-in-state', remove: ['city-not-ending-in-state'], mustGoRed: 'city whose last word is a state name (Springfield Illinois, IL)' },
   { name: 'zip-not-zeros', remove: ['zip-not-zeros'], mustGoRed: 'ZIP 00000' },
   { name: 'single-candidate', remove: ['single-candidate'], mustGoRed: 'a second firm return block sits above the recipient' },
   { name: 'no-cc-above', remove: ['no-cc-above'], mustGoRed: 'cc block above the salutation, with no recipient block at all' },
