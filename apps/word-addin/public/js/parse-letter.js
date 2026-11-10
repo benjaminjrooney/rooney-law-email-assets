@@ -67,7 +67,7 @@ const STATE_ABBREVIATIONS = new Set([
   'VI', 'WA', 'WV', 'WI', 'WY',
 ]);
 
-const STATE_NAMES = {
+export const STATE_NAMES = {
   alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO',
   connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA',
   hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA', kansas: 'KS',
@@ -397,15 +397,21 @@ function findRecipient(lines, deliveryIndex, options) {
   }
   if (boundary < 0) boundary = Math.min(lines.length, start + 30);
 
+  // `candidates` counts every address-shaped block that is not the firm's own
+  // before the salutation. The add-in takes the first; a caller that must never
+  // be wrong (PLEJ's pre-fill) can refuse a letter with more than one.
+  let found = null;
+  let candidates = 0;
   for (let index = start; index < boundary; index += 1) {
     if (!parseCityStateZip(lines[index])) continue;
     const address = parseAddressBlock([...addressLinesAbove(lines, index, start), lines[index]]);
     if (!address) continue;
     // Skip the letterhead and keep looking for the addressee below it.
     if (isOwnAddress(address, options)) continue;
-    return address;
+    candidates += 1;
+    if (!found) found = { address, cityIndex: index };
   }
-  return null;
+  return { recipient: found?.address ?? null, cityIndex: found?.cityIndex ?? -1, candidates };
 }
 
 function findCcSection(lines) {
@@ -468,6 +474,8 @@ function extractInlineMethod(line) {
  *   deliveryDetected: boolean,
  *   otherMethods: string[],
  *   recipient: object|null,
+ *   recipientCandidates: number,
+ *   recipientCityIndex: number,
  *   cc: object[],
  *   subject: string|null,
  *   warnings: string[]
@@ -507,7 +515,11 @@ export function parseLetter(documentText, options = {}) {
   }
 
   // ----------------------------------------------------------- recipient --
-  const recipient = findRecipient(lines, deliveryIndex, options);
+  const { recipient, cityIndex: recipientCityIndex, candidates: recipientCandidates } = findRecipient(
+    lines,
+    deliveryIndex,
+    options,
+  );
   if (!recipient) {
     warnings.push('Could not find a recipient address; enter it by hand.');
   } else if (recipient.confidence === 'low') {
@@ -580,6 +592,8 @@ export function parseLetter(documentText, options = {}) {
     deliveryDetected,
     otherMethods,
     recipient,
+    recipientCandidates,
+    recipientCityIndex,
     cc,
     subject,
     warnings,
